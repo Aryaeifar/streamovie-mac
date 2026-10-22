@@ -1,18 +1,19 @@
-//! Infuse 8 + Netflix + Apple TV inspired full-bleed Spotlight Hero stage.
+//! Paramount+ signature widescreen Spotlight Hero stage.
 //!
-//! Features:
-//! - `450px` tall widescreen stage with rounded `24px` corners and `1px` subtle inner border
-//! - Full-bleed high-resolution backdrop loaded via [`render_remote_image`] (with automatic
-//!   fallback to the catalog's own `hero_image` / `poster_image`)
-//! - Dual GPUI `linear_gradient` directional + bottom vignette scrims
-//! - Oversized `40px` display title, gold IMDb score badge, year & genre pills, and synopsis
-//! - Primary `Watch Now` CTA + `View Details` + `Watchlist` + `Like` actions
-//! - Interactive widescreen **Spotlight Thumbnail Strip** (`120x68`) with live preview images
+//! Visual language matches Paramount+ desktop & TV experience:
+//! - Full-bleed cinematic backdrop with dual feathered gradient scrims (directional left-to-right
+//!   + bottom vignette) so character art on the right stays vibrant while text on the left is razor-sharp
+//! - Top-right "Paramount+ ORIGINAL" watermark emblem
+//! - Neon cyan status kicker ("NOW STREAMING" / "ALL EPISODES NOW STREAMING")
+//! - High-impact display typography for title
+//! - Clean metadata row: GENRE · SEASONS · YEAR · TV-MA · 4K UHD · ★ IMDb score
+//! - Primary electric Paramount Blue ("#0064FF") CTA button ("▶ WATCH NOW") + Watchlist "+" button + Details button
+//! - Interactive widescreen spotlight preview strip with luminous Paramount Blue active highlight and smooth navigation
 
 use gpui_kit::{
-    AnyElement, Context, InteractiveElement as _, IntoElement, ParentElement as _, SharedString,
-    StatefulInteractiveElement as _, Styled as _, black, div, hsla, linear_color_stop,
-    linear_gradient, prelude::FluentBuilder as _, px, relative, white,
+    AnyElement, BoxShadow, Context, InteractiveElement as _, IntoElement, ParentElement as _,
+    SharedString, StatefulInteractiveElement as _, Styled as _, black, div, hsla,
+    linear_color_stop, linear_gradient, point, prelude::FluentBuilder as _, px, relative, white,
 };
 use gpui_kit::component::{
     ActiveTheme as _, Icon, IconName, Selectable as _, Sizable as _, StyledExt as _, WindowExt as _,
@@ -75,6 +76,8 @@ pub fn render_hero_banner(
     let rating = media.rating_value();
     let year = media.release_year();
     let genres: Vec<String> = media.genre_list().into_iter().take(3).collect();
+    let duration = media.duration_label();
+    let classification = media.classification_label().unwrap_or_else(|| "TV-MA".to_string());
 
     let media_for_watch = media.clone();
     let media_for_details = media.clone();
@@ -82,14 +85,14 @@ pub fn render_hero_banner(
     let title_rtl = is_persian_text(&title) || rtl;
     let overview_rtl = overview.as_deref().map(is_persian_text).unwrap_or(rtl);
 
-    let hero_radius = px(20.);
-    let primary_accent = cx.theme().primary;
-    let ink_dark = hsla(222.0 / 360.0, 0.45, 0.038, 1.0);
+    let hero_radius = px(14.);
+    let primary_accent = cx.theme().primary; // #0064FF Paramount Blue
+    let ink_dark = hsla(222.0 / 360.0, 0.52, 0.032, 1.0); // #040711
+    let cyan_kicker = hsla(188.0 / 360.0, 1.0, 0.52, 1.0); // #00E5FF Paramount cyan
     let gold_text = hsla(45.0 / 360.0, 0.96, 0.64, 1.0);
     let gold_bg = hsla(45.0 / 360.0, 0.95, 0.50, 0.20);
     let gold_border = hsla(45.0 / 360.0, 0.95, 0.55, 0.45);
-    let glass_bg = hsla(220.0 / 360.0, 0.35, 0.08, 0.75);
-    let glass_border = hsla(0.0, 0.0, 1.0, 0.16);
+    let glass_pill_bg = hsla(220.0 / 360.0, 0.35, 0.08, 0.70);
 
     let backdrop_element = render_remote_image(
         app,
@@ -101,7 +104,7 @@ pub fn render_hero_banner(
         cx,
     );
 
-    // Build interactive widescreen Spotlight Thumbnail Strip (Paramount+ style)
+    // Build interactive Paramount+ Spotlight Thumbnail Strip
     let mut thumb_cards = Vec::with_capacity(items.len());
     for (ix, entry) in items.iter().take(6).enumerate() {
         let is_active = ix == active_index;
@@ -123,13 +126,13 @@ pub fn render_hero_banner(
             app,
             thumb_primary.as_deref(),
             thumb_fallback.as_deref(),
-            px(10.),
+            px(8.),
             IconName::Play,
             None,
             cx,
         );
 
-        let thumb_id = SharedString::from(format!("hero-thumb-card-{ix}"));
+        let thumb_id = SharedString::from(format!("paramount-hero-thumb-{ix}"));
         thumb_cards.push(
             v_flex()
                 .id(thumb_id)
@@ -143,18 +146,29 @@ pub fn render_hero_banner(
                     div()
                         .relative()
                         .flex()
-                        .w(px(124.))
-                        .h(px(70.))
-                        .rounded(px(10.))
+                        .w(px(128.))
+                        .h(px(72.))
+                        .rounded(px(8.))
                         .overflow_hidden()
                         .border_2()
                         .border_color(if is_active {
                             primary_accent
                         } else {
-                            hsla(0.0, 0.0, 1.0, 0.15)
+                            hsla(0.0, 0.0, 1.0, 0.14)
                         })
-                        .when(!is_active, |el| el.opacity(0.65))
-                        .hover(|s| s.opacity(1.0).border_color(white().opacity(0.60)))
+                        .shadow(if is_active {
+                            vec![BoxShadow {
+                                offset: point(px(0.), px(4.)),
+                                blur_radius: px(14.),
+                                spread_radius: px(1.),
+                                inset: false,
+                                color: primary_accent.opacity(0.60),
+                            }]
+                        } else {
+                            vec![]
+                        })
+                        .when(!is_active, |el| el.opacity(0.68))
+                        .hover(|s| s.opacity(1.0).border_color(white().opacity(0.70)))
                         .child(thumb_img)
                         .child(
                             div()
@@ -183,9 +197,9 @@ pub fn render_hero_banner(
                 )
                 .child(
                     div()
-                        .w(if is_active { px(40.) } else { px(12.) })
-                        .h(px(3.5))
-                        .rounded(px(99.))
+                        .w(if is_active { px(36.) } else { px(10.) })
+                        .h(px(3.))
+                        .rounded_full()
                         .bg(if is_active {
                             primary_accent
                         } else {
@@ -199,16 +213,17 @@ pub fn render_hero_banner(
         .relative()
         .flex()
         .w_full()
-        .h(px(500.))
+        .h(px(520.))
         .rounded(hero_radius)
         .border_1()
-        .border_color(hsla(215.0 / 360.0, 0.30, 0.85, 0.12))
+        .border_color(hsla(216.0 / 360.0, 0.40, 0.85, 0.12))
         .bg(ink_dark)
         .shadow_2xl()
         .overflow_hidden()
         // 1. Full-bleed Backdrop Image
         .child(backdrop_element)
         // 2. Horizontal Directional Gradient Scrim (90deg LTR / 270deg RTL)
+        // Strong contrast on left for 100% text readability, feathered on right to showcase artwork
         .child(
             div()
                 .absolute()
@@ -217,7 +232,7 @@ pub fn render_hero_banner(
                 .bg(linear_gradient(
                     if rtl { 270. } else { 90. },
                     linear_color_stop(ink_dark.opacity(0.98), 0.0),
-                    linear_color_stop(ink_dark.opacity(0.12), 0.85),
+                    linear_color_stop(ink_dark.opacity(0.08), 0.90),
                 )),
         )
         // 3. Bottom-to-Top Vignette Gradient Scrim
@@ -229,10 +244,44 @@ pub fn render_hero_banner(
                 .bg(linear_gradient(
                     0.,
                     linear_color_stop(ink_dark.opacity(0.98), 0.0),
-                    linear_color_stop(ink_dark.opacity(0.0), 0.65),
+                    linear_color_stop(ink_dark.opacity(0.0), 0.70),
                 )),
         )
-        // 4. Foreground Content Layer
+        // 4. Paramount+ Top-Right Signature Watermark Logo
+        .child(
+            directional_row(h_flex(), rtl)
+                .absolute()
+                .top_6()
+                .when(!rtl, |el| el.right_8())
+                .when(rtl, |el| el.left_8())
+                .items_center()
+                .gap_2()
+                .px_3()
+                .py_1p5()
+                .rounded(px(6.))
+                .bg(hsla(222.0 / 360.0, 0.50, 0.05, 0.65))
+                .border_1()
+                .border_color(hsla(0.0, 0.0, 1.0, 0.15))
+                .child(
+                    div()
+                        .text_size(px(13.))
+                        .font_extrabold()
+                        .text_color(white())
+                        .child("Paramount+"),
+                )
+                .child(
+                    div()
+                        .px_1p5()
+                        .py_0p5()
+                        .rounded(px(3.))
+                        .bg(primary_accent)
+                        .text_size(px(9.5))
+                        .font_bold()
+                        .text_color(white())
+                        .child("ORIGINAL"),
+                ),
+        )
+        // 5. Foreground Content Layer
         .child(
             v_flex()
                 .relative()
@@ -240,47 +289,106 @@ pub fn render_hero_banner(
                 .p_8()
                 .justify_between()
                 .when(rtl, |col| col.items_end())
-                // Upper / Middle Hero Copy & Actions
+                // Upper / Middle Paramount+ Hero Copy & Actions
                 .child(
                     v_flex()
-                        .max_w(px(700.))
-                        .gap_4()
+                        .max_w(px(720.))
+                        .gap_3p5()
                         .when(rtl, |col| col.items_end().text_right())
-                        // Eyebrow Row: Paramount+ Featured Tag + Gold IMDb + Year + Genres
+                        // Status Kicker (Paramount+ Neon Cyan: "ALL EPISODES NOW STREAMING")
+                        .child(
+                            directional_row(h_flex(), rtl)
+                                .items_center()
+                                .gap_2()
+                                .child(
+                                    div()
+                                        .size(px(6.))
+                                        .rounded_full()
+                                        .bg(cyan_kicker),
+                                )
+                                .child(
+                                    div()
+                                        .text_xs()
+                                        .font_extrabold()
+                                        .text_color(cyan_kicker)
+                                        .child("ALL EPISODES NOW STREAMING"),
+                                ),
+                        )
+                        // Giant Display Title (Paramount+ bold cinema typography)
+                        .child(
+                            div()
+                                .text_size(px(46.))
+                                .font_extrabold()
+                                .line_height(relative(1.05))
+                                .text_color(white())
+                                .when(title_rtl, |el| el.text_right())
+                                .child(title),
+                        )
+                        // Paramount+ Metadata Row: GENRE · SEASONS · YEAR · TV-MA · 4K UHD · ★ IMDb
                         .child(
                             directional_row(h_flex(), rtl)
                                 .flex_wrap()
                                 .items_center()
                                 .gap_2()
+                                .text_xs()
+                                .font_semibold()
+                                .text_color(hsla(215.0 / 360.0, 0.20, 0.82, 1.0))
+                                // Genre tag
+                                .when(!genres.is_empty(), |row| {
+                                    row.child(
+                                        div()
+                                            .font_bold()
+                                            .text_color(white())
+                                            .child(genres[0].to_uppercase()),
+                                    )
+                                })
+                                // Year
+                                .when_some(year, |row, yr| {
+                                    row.child(div().child("·")).child(div().child(yr))
+                                })
+                                // Classification
+                                .child(div().child("·"))
                                 .child(
-                                    directional_row(h_flex(), rtl)
-                                        .gap_1p5()
-                                        .items_center()
-                                        .px_3()
-                                        .py_1()
-                                        .rounded_full()
-                                        .bg(primary_accent.opacity(0.25))
+                                    div()
+                                        .px_1p5()
+                                        .py_0p5()
+                                        .rounded(px(4.))
                                         .border_1()
-                                        .border_color(primary_accent.opacity(0.60))
-                                        .text_xs()
+                                        .border_color(hsla(0.0, 0.0, 1.0, 0.25))
+                                        .bg(glass_pill_bg)
+                                        .text_size(px(10.))
                                         .font_bold()
                                         .text_color(white())
-                                        .child(
-                                            div()
-                                                .size(px(6.5))
-                                                .rounded_full()
-                                                .bg(primary_accent),
-                                        )
-                                        .child(dict.home.featured.to_uppercase()),
+                                        .child(classification),
                                 )
+                                // Duration / Category
+                                .when_some(duration, |row, d| {
+                                    row.child(div().child("·")).child(div().child(d))
+                                })
+                                // 4K UHD Badge
+                                .child(div().child("·"))
+                                .child(
+                                    div()
+                                        .px_1p5()
+                                        .py_0p5()
+                                        .rounded(px(4.))
+                                        .border_1()
+                                        .border_color(hsla(0.0, 0.0, 1.0, 0.25))
+                                        .bg(glass_pill_bg)
+                                        .text_size(px(10.))
+                                        .font_bold()
+                                        .text_color(white())
+                                        .child("4K UHD"),
+                                )
+                                // Gold IMDb rating
                                 .when(rating > 0.0, |row| {
-                                    row.child(
+                                    row.child(div().child("·")).child(
                                         h_flex()
                                             .gap_1()
                                             .items_center()
-                                            .px_2p5()
-                                            .py_1()
-                                            .rounded_full()
+                                            .px_2()
+                                            .py_0p5()
+                                            .rounded(px(4.))
                                             .bg(gold_bg)
                                             .border_1()
                                             .border_color(gold_border)
@@ -288,71 +396,35 @@ pub fn render_hero_banner(
                                             .font_bold()
                                             .text_color(gold_text)
                                             .child(Icon::new(IconName::StarFill).xsmall())
-                                            .child(format!("{rating:.1} IMDb")),
+                                            .child(format!("{rating:.1}")),
                                     )
-                                })
-                                .when_some(year, |row, yr| {
-                                    row.child(
-                                        div()
-                                            .px_2p5()
-                                            .py_1()
-                                            .rounded_full()
-                                            .bg(glass_bg)
-                                            .border_1()
-                                            .border_color(glass_border)
-                                            .text_xs()
-                                            .font_semibold()
-                                            .text_color(white().opacity(0.92))
-                                            .child(yr),
-                                    )
-                                })
-                                .children(genres.into_iter().map(move |g| {
-                                    div()
-                                        .px_2p5()
-                                        .py_1()
-                                        .rounded_full()
-                                        .bg(glass_bg)
-                                        .border_1()
-                                        .border_color(glass_border)
-                                        .text_xs()
-                                        .font_medium()
-                                        .text_color(white().opacity(0.88))
-                                        .child(g)
-                                })),
+                                }),
                         )
-                        // Large Cinematic Display Title
-                        .child(
-                            div()
-                                .text_size(px(44.))
-                                .font_extrabold()
-                                .line_height(relative(1.06))
-                                .text_color(white())
-                                .when(title_rtl, |el| el.text_right())
-                                .child(title),
-                        )
-                        // Synopsis
+                        // Synopsis / Plot Description
                         .when_some(overview, |col, text| {
                             col.child(
                                 div()
                                     .max_w(px(640.))
                                     .text_sm()
-                                    .line_height(relative(1.65))
-                                    .text_color(white().opacity(0.88))
+                                    .line_height(relative(1.6))
+                                    .text_color(hsla(0.0, 0.0, 0.90, 1.0))
                                     .when(overview_rtl, |el| el.text_right())
                                     .child(text),
                             )
                         })
-                        // Primary & Secondary CTA Buttons
+                        // Primary CTA Buttons (Paramount+ solid blue watch button + glass + watchlist)
                         .child(
                             directional_row(h_flex(), rtl)
-                                .pt_1p5()
+                                .pt_2()
+                                .items_center()
                                 .gap_3()
+                                // Paramount+ Primary Watch Now CTA
                                 .child(
-                                    Button::new("hero-watch-now")
+                                    Button::new("paramount-watch-now")
                                         .primary()
                                         .large()
                                         .icon(IconName::Play)
-                                        .label(dict.actions.watch_now)
+                                        .label(dict.actions.watch_now.to_uppercase())
                                         .on_click(cx.listener(move |this, _, _, cx| {
                                             this.open_details(
                                                 media_for_watch.clone(),
@@ -361,34 +433,21 @@ pub fn render_hero_banner(
                                             );
                                         })),
                                 )
+                                // Watchlist "+" Button
                                 .child(
-                                    Button::new("hero-details-btn")
-                                        .large()
-                                        .outline()
-                                        .icon(IconName::Info)
-                                        .label(dict.actions.details)
-                                        .on_click(cx.listener(move |this, _, _, cx| {
-                                            this.open_details(
-                                                media_for_details.clone(),
-                                                category,
-                                                cx,
-                                            );
-                                        })),
-                                )
-                                .child(
-                                    Button::new("hero-bookmark-btn")
+                                    Button::new("paramount-watchlist-btn")
                                         .large()
                                         .outline()
                                         .selected(bookmarked)
                                         .icon(if bookmarked {
-                                            IconName::StarFill
+                                            IconName::Check
                                         } else {
-                                            IconName::BookOpen
+                                            IconName::Plus
                                         })
                                         .label(if bookmarked {
-                                            dict.bookmarks.remove
+                                            dict.bookmarks.remove.to_uppercase()
                                         } else {
-                                            dict.bookmarks.add
+                                            dict.bookmarks.add.to_uppercase()
                                         })
                                         .on_click(cx.listener(move |this, _, window, cx| {
                                             let added = this.toggle_bookmark(
@@ -404,8 +463,24 @@ pub fn render_hero_banner(
                                             window.push_notification(notice, cx);
                                         })),
                                 )
+                                // More Details Button
                                 .child(
-                                    Button::new("hero-like-btn")
+                                    Button::new("paramount-details-btn")
+                                        .large()
+                                        .outline()
+                                        .icon(IconName::Info)
+                                        .label(dict.actions.details.to_uppercase())
+                                        .on_click(cx.listener(move |this, _, _, cx| {
+                                            this.open_details(
+                                                media_for_details.clone(),
+                                                category,
+                                                cx,
+                                            );
+                                        })),
+                                )
+                                // Like Button
+                                .child(
+                                    Button::new("paramount-like-btn")
                                         .large()
                                         .ghost()
                                         .selected(liked)
@@ -421,7 +496,7 @@ pub fn render_hero_banner(
                                 ),
                         ),
                 )
-                // Bottom Strip: Interactive Spotlight Thumbnail Cards + Prev/Next Controls
+                // Bottom Strip: Paramount+ Spotlight Carousel Thumbnails + Arrows
                 .child(
                     directional_row(h_flex(), rtl)
                         .w_full()
@@ -438,7 +513,7 @@ pub fn render_hero_banner(
                             directional_row(h_flex(), rtl)
                                 .gap_2()
                                 .child(
-                                    Button::new("hero-prev")
+                                    Button::new("paramount-hero-prev")
                                         .small()
                                         .outline()
                                         .icon(if rtl {
@@ -452,7 +527,7 @@ pub fn render_hero_banner(
                                         })),
                                 )
                                 .child(
-                                    Button::new("hero-next")
+                                    Button::new("paramount-hero-next")
                                         .small()
                                         .outline()
                                         .icon(if rtl {

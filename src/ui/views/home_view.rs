@@ -1,15 +1,18 @@
-//! Home discovery view (`Home`) redesigned with an Infuse 8 + Apple TV + Netflix aesthetic.
+//! Landing / Home discovery view completely redesigned to match Paramount+ UI/UX.
+//!
 //! Features:
-//! - Full-bleed `450px` cinematic `HeroBanner` with interactive widescreen spotlight selector
-//! - Four Netflix-style horizontal scrolling carousels (`ScrollHandle` + `<` / `>` scroll buttons):
-//!   1. Latest Movies (`2:3` Infuse/Apple TV posters)
-//!   2. Latest Series (`16:9` Netflix/Apple TV widescreen cards)
-//!   3. IMDb Top Rated Movies (`2:3` Infuse/Apple TV posters)
-//!   4. IMDb Top Rated Series (`2:3` Infuse/Apple TV posters)
+//! - Full-bleed cinematic `HeroBanner` with Paramount+ branding, status kicker, display title, and CTA
+//! - "Now Featuring" Paramount+ Brand Channels & Hubs rail (CBS, Paramount+ Originals, SHOWTIME, Movies, Series)
+//! - Four Paramount+ horizontal scrolling rails with electric blue focus hover and smooth pagination:
+//!   1. Trending Shows for You (16:9 widescreen Paramount+ cards)
+//!   2. Blockbuster Movies (2:3 vertical Paramount+ poster cards)
+//!   3. Top Rated Movies (2:3 vertical Paramount+ poster cards)
+//!   4. Binge-Worthy TV Series (2:3 vertical Paramount+ poster cards)
 
 use gpui_kit::{
     AnyElement, Context, InteractiveElement as _, IntoElement, ParentElement as _, SharedString,
-    StatefulInteractiveElement as _, Styled as _, div, prelude::FluentBuilder as _, px,
+    StatefulInteractiveElement as _, Styled as _, div, hsla, prelude::FluentBuilder as _, px,
+    white,
 };
 use gpui_kit::component::{
     ActiveTheme as _, IconName, Sizable as _, StyledExt as _,
@@ -37,15 +40,15 @@ pub fn render_home_view(
     let dict = locale.dict();
     let rtl = locale.is_rtl();
     let home = app.home_state();
-    let radius_lg = cx.theme().radius_lg;
+    let radius = cx.theme().radius; // 8px
 
     if home.loading && home.latest_movies.is_empty() && home.latest_series.is_empty() {
         return v_flex()
             .w_full()
-            .gap_10()
-            .child(Skeleton::new().w_full().h(px(500.)).rounded(radius_lg))
-            .child(render_skeleton_row(radius_lg, PosterCardStyle::Poster))
-            .child(render_skeleton_row(radius_lg, PosterCardStyle::Widescreen))
+            .gap_8()
+            .child(Skeleton::new().w_full().h(px(520.)).rounded(radius))
+            .child(render_skeleton_row(radius, PosterCardStyle::Widescreen))
+            .child(render_skeleton_row(radius, PosterCardStyle::Poster))
             .into_any_element();
     }
 
@@ -85,24 +88,15 @@ pub fn render_home_view(
         div().into_any_element()
     };
 
-    let latest_movies_sec = render_carousel_section(
+    // Paramount+ "Now Featuring" Brand Channels / Hubs Rail
+    let brand_hubs_rail = render_paramount_brand_hubs(app, cx);
+
+    // Carousels
+    let trending_shows_sec = render_paramount_carousel_section(
         app,
         0,
-        "latest-movies",
-        dict.home.movies,
-        dict.home.movies_subtitle,
-        &home.latest_movies,
-        MediaCategory::Movie,
-        NavSection::Movies,
-        BrowseSort::Created,
-        PosterCardStyle::Poster,
-        cx,
-    );
-    let latest_series_sec = render_carousel_section(
-        app,
-        1,
-        "latest-series",
-        dict.home.series_row,
+        "trending-shows",
+        "TRENDING SHOWS FOR YOU",
         dict.home.series_subtitle,
         &home.latest_series,
         MediaCategory::Series,
@@ -111,11 +105,24 @@ pub fn render_home_view(
         PosterCardStyle::Widescreen,
         cx,
     );
-    let imdb_movies_sec = render_carousel_section(
+    let blockbuster_movies_sec = render_paramount_carousel_section(
+        app,
+        1,
+        "blockbuster-movies",
+        "BLOCKBUSTER MOVIES",
+        dict.home.movies_subtitle,
+        &home.latest_movies,
+        MediaCategory::Movie,
+        NavSection::Movies,
+        BrowseSort::Created,
+        PosterCardStyle::Poster,
+        cx,
+    );
+    let top_rated_movies_sec = render_paramount_carousel_section(
         app,
         2,
-        "imdb-movies",
-        dict.home.imdb_movies,
+        "top-rated-movies",
+        "CRITICALLY ACCLAIMED MOVIES",
         dict.home.imdb_movies_subtitle,
         &home.imdb_movies,
         MediaCategory::Movie,
@@ -124,11 +131,11 @@ pub fn render_home_view(
         PosterCardStyle::Poster,
         cx,
     );
-    let imdb_series_sec = render_carousel_section(
+    let top_rated_series_sec = render_paramount_carousel_section(
         app,
         3,
-        "imdb-series",
-        dict.home.imdb_series,
+        "binge-worthy-series",
+        "BINGE-WORTHY TV SERIES",
         dict.home.imdb_series_subtitle,
         &home.imdb_series,
         MediaCategory::Series,
@@ -140,19 +147,115 @@ pub fn render_home_view(
 
     v_flex()
         .w_full()
-        .gap_10()
+        .gap_8()
         .pb_12()
         .child(hero)
-        .child(latest_movies_sec)
-        .child(latest_series_sec)
-        .child(imdb_movies_sec)
-        .child(imdb_series_sec)
+        .child(brand_hubs_rail)
+        .child(trending_shows_sec)
+        .child(blockbuster_movies_sec)
+        .child(top_rated_movies_sec)
+        .child(top_rated_series_sec)
         .when(rtl, |this| this.items_end())
         .into_any_element()
 }
 
+/// Renders the signature Paramount+ "Now Featuring" Brand Hubs rail (CBS, Paramount+ Originals, SHOWTIME, etc.)
+fn render_paramount_brand_hubs(
+    app: &StreamovieApp,
+    cx: &mut Context<StreamovieApp>,
+) -> AnyElement {
+    let locale = app.locale();
+    let rtl = locale.is_rtl();
+    let primary = cx.theme().primary; // #0064FF
+
+    let hubs = [
+        ("Paramount+", "ORIGINALS", NavSection::Series),
+        ("CBS", "HIT SHOWS", NavSection::Series),
+        ("SHOWTIME", "EXCLUSIVE", NavSection::Series),
+        ("CINEMA", "BLOCKBUSTERS", NavSection::Movies),
+        ("TOP 10", "MOST WATCHED", NavSection::Movies),
+    ];
+
+    let mut hub_cards = Vec::with_capacity(hubs.len());
+    for (ix, (brand_title, tag, target_nav)) in hubs.iter().enumerate() {
+        let hub_id = SharedString::from(format!("paramount-hub-{ix}"));
+        let nav = *target_nav;
+
+        hub_cards.push(
+            div()
+                .id(hub_id)
+                .flex_1()
+                .h(px(64.))
+                .min_w(px(140.))
+                .rounded(px(8.))
+                .bg(hsla(220.0 / 360.0, 0.38, 0.08, 0.90))
+                .border_1()
+                .border_color(hsla(216.0 / 360.0, 0.40, 0.85, 0.12))
+                .cursor_pointer()
+                .hover(move |s| {
+                    s.border_color(primary)
+                        .bg(hsla(216.0 / 360.0, 0.60, 0.14, 0.90))
+                })
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    this.select_section(nav, cx);
+                }))
+                .child(
+                    v_flex()
+                        .size_full()
+                        .items_center()
+                        .justify_center()
+                        .gap_1()
+                        .child(
+                            div()
+                                .text_base()
+                                .font_extrabold()
+                                .text_color(white())
+                                .child(*brand_title),
+                        )
+                        .child(
+                            div()
+                                .text_size(px(9.5))
+                                .font_bold()
+                                .text_color(hsla(216.0 / 360.0, 1.0, 0.65, 1.0))
+                                .child(*tag),
+                        ),
+                ),
+        );
+    }
+
+    v_flex()
+        .w_full()
+        .gap_3()
+        .child(
+            directional_row(h_flex(), rtl)
+                .items_center()
+                .gap_2()
+                .child(
+                    div()
+                        .w(px(3.))
+                        .h(px(14.))
+                        .rounded_full()
+                        .bg(primary),
+                )
+                .child(
+                    div()
+                        .text_xs()
+                        .font_extrabold()
+                        .text_color(hsla(215.0 / 360.0, 0.20, 0.75, 1.0))
+                        .child("NOW FEATURING"),
+                ),
+        )
+        .child(
+            directional_row(h_flex(), rtl)
+                .w_full()
+                .gap_3()
+                .children(hub_cards),
+        )
+        .into_any_element()
+}
+
 #[allow(clippy::too_many_arguments)]
-fn render_carousel_section(
+fn render_paramount_carousel_section(
     app: &StreamovieApp,
     row_index: usize,
     section_key: &str,
@@ -170,12 +273,12 @@ fn render_carousel_section(
     let rtl = locale.is_rtl();
     let count_badge = format_count(dict.home.titles_count, items.len(), locale);
     let see_more_id = SharedString::from(format!("see-more-{section_key}"));
-    let scroll_left_id = SharedString::from(format!("carousel-prev-{section_key}"));
-    let scroll_right_id = SharedString::from(format!("carousel-next-{section_key}"));
-    let track_id = SharedString::from(format!("carousel-track-{section_key}"));
+    let scroll_left_id = SharedString::from(format!("paramount-prev-{section_key}"));
+    let scroll_right_id = SharedString::from(format!("paramount-next-{section_key}"));
+    let track_id = SharedString::from(format!("paramount-track-{section_key}"));
     let scroll_handle = app.home_row_scroll_handle(row_index).clone();
 
-    let visible_items: Vec<ApiMedia> = items.iter().take(16).cloned().collect();
+    let visible_items: Vec<ApiMedia> = items.iter().take(18).cloned().collect();
     let mut cards = Vec::with_capacity(visible_items.len());
     for media in &visible_items {
         cards.push(render_poster_card_with_style(
@@ -192,8 +295,8 @@ fn render_carousel_section(
 
     v_flex()
         .w_full()
-        .gap_4()
-        // Section Header: Paramount+ Accent bar + Title + Count Pill + Scroll Controls + See More
+        .gap_3p5()
+        // Paramount+ Section Header: Electric blue bar + uppercase title + scroll buttons
         .child(
             directional_row(h_flex(), rtl)
                 .w_full()
@@ -207,7 +310,7 @@ fn render_carousel_section(
                         .child(
                             div()
                                 .w(px(3.5))
-                                .h(px(24.))
+                                .h(px(22.))
                                 .rounded_full()
                                 .bg(cx.theme().primary),
                         )
@@ -221,8 +324,8 @@ fn render_carousel_section(
                                         .gap_2p5()
                                         .child(
                                             div()
-                                                .text_xl()
-                                                .font_bold()
+                                                .text_lg()
+                                                .font_extrabold()
                                                 .text_color(cx.theme().foreground)
                                                 .child(title.to_string()),
                                         )
@@ -277,19 +380,19 @@ fn render_carousel_section(
                                 } else {
                                     IconName::ArrowRight
                                 })
-                                .label(dict.actions.see_more)
+                                .label(dict.actions.see_more.to_uppercase())
                                 .on_click(cx.listener(move |this, _, _, cx| {
                                     this.navigate_to_catalog_with_sort(target_nav, target_sort, cx);
                                 })),
                         ),
                 ),
         )
-        // Horizontal Carousel Track (with vertical padding to accommodate hover elevation without clipping)
+        // Paramount+ Horizontal Carousel Track
         .child(if cards.is_empty() {
             div()
                 .w_full()
                 .p_6()
-                .rounded(cx.theme().radius_lg)
+                .rounded(cx.theme().radius)
                 .border_1()
                 .border_color(cx.theme().border)
                 .bg(cx.theme().popover)
@@ -316,15 +419,15 @@ fn render_carousel_section(
         .into_any_element()
 }
 
-fn render_skeleton_row(radius_lg: gpui_kit::Pixels, style: PosterCardStyle) -> AnyElement {
+fn render_skeleton_row(radius: gpui_kit::Pixels, style: PosterCardStyle) -> AnyElement {
     let (w, h) = match style {
-        PosterCardStyle::Poster => (px(196.), px(294.)),
-        PosterCardStyle::Widescreen => (px(292.), px(166.)),
+        PosterCardStyle::Poster => (px(192.), px(288.)),
+        PosterCardStyle::Widescreen => (px(288.), px(162.)),
     };
     h_flex()
         .w_full()
         .gap_4()
         .overflow_hidden()
-        .children((0..6).map(move |_| Skeleton::new().w(w).h(h).rounded(radius_lg)))
+        .children((0..6).map(move |_| Skeleton::new().w(w).h(h).rounded(radius)))
         .into_any_element()
 }

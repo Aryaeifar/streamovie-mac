@@ -1,12 +1,12 @@
-//! Infuse 8 + Apple TV + Netflix inspired media cards built on `uni-kit` (`gpui-kit`).
+//! Paramount+ signature media cards built on `uni-kit` (`gpui-kit`).
 //!
-//! Supports two presentation styles:
-//! - [`PosterCardStyle::Poster`] (`200x300` `2:3` vertical artwork card, Infuse / Apple TV style)
-//! - [`PosterCardStyle::Widescreen`] (`296x168` `16:9` landscape backdrop card, Netflix / Apple TV style)
-//!
-//! Both styles use [`render_remote_image`] for reliable image loading, GPUI `linear_gradient`
-//! bottom vignettes, floating frosted-glass gold IMDb badges, quick-bookmark buttons, and
-//! glowing brand-accent hover states.
+//! Features:
+//! - Standard 2:3 vertical poster card (`192x288`, Paramount+ catalog style)
+//! - Widescreen 16:9 landscape card (`288x162`, Paramount+ featured row style)
+//! - Crisp 8px corners matching Paramount+ UI/UX
+//! - Signature Paramount+ hover lift with 2px electric blue border and luminous glow shadow
+//! - Paramount+ "NEW EPISODE" / "EXCLUSIVE" badge, floating "+" watchlist button, and bottom branding watermark
+//! - Below-poster high-contrast title and metadata caption
 
 use gpui_kit::{
     AnyElement, BoxShadow, Context, InteractiveElement as _, IntoElement, ParentElement as _,
@@ -28,10 +28,10 @@ use crate::{
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum PosterCardStyle {
-    /// Standard 2:3 vertical movie/series poster card (`200x300`, Paramount+ / cinema style).
+    /// Standard 2:3 vertical movie/series poster card (`192x288`, Paramount+ cinema style).
     #[default]
     Poster,
-    /// Widescreen 16:9 landscape card (`296x168`, Paramount+ featured row style).
+    /// Widescreen 16:9 landscape card (`288x162`, Paramount+ featured row style).
     Widescreen,
 }
 
@@ -86,60 +86,56 @@ pub fn render_poster_card_with_style(
     let first_genre = genres.first().cloned();
 
     let (card_w, frame_h) = match card_style {
-        PosterCardStyle::Poster => (px(196.), px(294.)),
-        PosterCardStyle::Widescreen => (px(292.), px(166.)),
+        PosterCardStyle::Poster => (px(192.), px(288.)),
+        PosterCardStyle::Widescreen => (px(288.), px(162.)),
     };
-    let card_radius = px(14.);
+    let card_radius = px(8.); // Crisp Paramount+ 8px radius
 
     let card_id = SharedString::from(format!(
-        "media-card-{id_scope}-{}-{media_id}",
+        "paramount-card-{id_scope}-{}-{media_id}",
         category.as_str()
     ));
     let bookmark_btn_id = SharedString::from(format!(
-        "bookmark-btn-{id_scope}-{}-{media_id}",
+        "paramount-bm-btn-{id_scope}-{}-{media_id}",
         category.as_str()
     ));
 
     let media_for_open = media.clone();
     let media_for_bookmark = media.clone();
 
-    let primary_accent = cx.theme().primary;
-    let subtle_border = if cx.theme().is_dark() {
-        hsla(215.0 / 360.0, 0.30, 0.85, 0.12)
-    } else {
-        cx.theme().border
-    };
+    let primary_accent = cx.theme().primary; // #0064FF Paramount Blue
+    let card_bg = hsla(220.0 / 360.0, 0.38, 0.075, 1.0); // #0a1120
+    let subtle_border = hsla(216.0 / 360.0, 0.35, 0.85, 0.10);
 
     let default_shadow = vec![BoxShadow {
         offset: point(px(0.), px(4.)),
-        blur_radius: px(14.),
+        blur_radius: px(12.),
         spread_radius: px(0.),
         inset: false,
-        color: hsla(222.0 / 360.0, 0.45, 0.02, 0.65),
+        color: hsla(222.0 / 360.0, 0.50, 0.02, 0.70),
     }];
 
+    // Signature Paramount+ luminous blue focus glow
     let hover_shadow = vec![
         BoxShadow {
-            offset: point(px(0.), px(12.)),
-            blur_radius: px(28.),
-            spread_radius: px(1.5),
+            offset: point(px(0.), px(10.)),
+            blur_radius: px(26.),
+            spread_radius: px(1.0),
             inset: false,
-            color: hsla(217.0 / 360.0, 0.95, 0.50, 0.40),
+            color: primary_accent.opacity(0.48),
         },
         BoxShadow {
-            offset: point(px(0.), px(6.)),
-            blur_radius: px(14.),
+            offset: point(px(0.), px(4.)),
+            blur_radius: px(12.),
             spread_radius: px(0.),
             inset: false,
             color: hsla(0.0, 0.0, 0.0, 0.85),
         },
     ];
 
-    let gold_pill_bg = hsla(0.0, 0.0, 0.04, 0.82);
-    let gold_pill_border = hsla(45.0 / 360.0, 0.95, 0.55, 0.45);
+    let gold_pill_bg = hsla(222.0 / 360.0, 0.50, 0.05, 0.85);
+    let gold_pill_border = hsla(45.0 / 360.0, 0.95, 0.55, 0.40);
     let gold_text = hsla(45.0 / 360.0, 0.96, 0.64, 1.0);
-    let glass_pill_bg = hsla(220.0 / 360.0, 0.35, 0.06, 0.80);
-    let glass_pill_border = hsla(0.0, 0.0, 1.0, 0.16);
 
     let fallback_type_label = if category == MediaCategory::Series {
         dict.home.series
@@ -167,13 +163,13 @@ pub fn render_poster_card_with_style(
         .flex_shrink_0()
         .pt(px(6.))
         .pb_1()
-        .gap_2p5()
+        .gap_2()
         .cursor_pointer()
-        .group("poster-card")
+        .group("paramount-card")
         .on_click(cx.listener(move |this, _, _, cx| {
             this.open_details(media_for_open.clone(), category, cx);
         }))
-        // Artwork Frame (Paramount+ rounded poster with gentle scale lift + soft glow shadow)
+        // Artwork Frame (Paramount+ rounded poster with scale lift + electric blue focus border & glow)
         .child(
             div()
                 .relative()
@@ -181,22 +177,23 @@ pub fn render_poster_card_with_style(
                 .w(card_w)
                 .h(frame_h)
                 .rounded(card_radius)
-                .bg(cx.theme().popover)
+                .bg(card_bg)
                 .border_1()
                 .border_color(subtle_border)
                 .shadow(default_shadow)
                 .overflow_hidden()
-                // Smooth hover animation: gentle scale lift + soft Paramount Blue shadow + crisp border highlight
-                .group_hover("poster-card", move |style| {
+                // Paramount+ signature hover effect: scale lift + 2px Paramount Blue border + blue glow
+                .group_hover("paramount-card", move |style| {
                     style
                         .mt(-px(6.))
                         .mb(px(6.))
-                        .border_color(primary_accent.opacity(0.95))
+                        .border_2()
+                        .border_color(primary_accent)
                         .shadow(hover_shadow.clone())
                 })
                 // 1. Remote Poster / Backdrop Image
                 .child(artwork)
-                // 2. Bottom Cinematic Gradient Vignette
+                // 2. Bottom Subtle Gradient Vignette
                 .child(
                     div()
                         .absolute()
@@ -204,59 +201,61 @@ pub fn render_poster_card_with_style(
                         .rounded(card_radius)
                         .bg(linear_gradient(
                             0.,
-                            linear_color_stop(black().opacity(0.92), 0.0),
-                            linear_color_stop(black().opacity(0.0), 0.62),
+                            linear_color_stop(black().opacity(0.88), 0.0),
+                            linear_color_stop(black().opacity(0.0), 0.65),
                         )),
                 )
-                // 3. Top Floating Bar: Gold IMDb Rating Pill + Bookmark Action
+                // 3. Top Floating Bar: Paramount+ "NEW EPISODE" / Rating Pill + Watchlist "+" Action
                 .child(
                     directional_row(h_flex(), rtl)
                         .absolute()
-                        .top_2p5()
-                        .left_2p5()
-                        .right_2p5()
+                        .top_2()
+                        .left_2()
+                        .right_2()
                         .justify_between()
                         .items_center()
                         .gap_1p5()
-                        .child(if rating > 0.0 {
+                        // Left badge: NEW EPISODE or IMDb rating
+                        .child(if category == MediaCategory::Series {
+                            div()
+                                .px_1p5()
+                                .py_0p5()
+                                .rounded(px(4.))
+                                .bg(primary_accent)
+                                .text_size(px(9.5))
+                                .font_bold()
+                                .text_color(white())
+                                .child("NEW EPISODE")
+                                .into_any_element()
+                        } else if rating > 0.0 {
                             h_flex()
                                 .gap_1()
                                 .items_center()
-                                .px_2()
+                                .px_1p5()
                                 .py_0p5()
-                                .rounded(px(7.))
+                                .rounded(px(4.))
                                 .bg(gold_pill_bg)
                                 .border_1()
                                 .border_color(gold_pill_border)
                                 .text_color(gold_text)
-                                .text_xs()
+                                .text_size(px(10.))
                                 .font_bold()
                                 .child(Icon::new(IconName::StarFill).xsmall())
                                 .child(format!("{rating:.1}"))
                                 .into_any_element()
                         } else {
-                            div()
-                                .px_2()
-                                .py_0p5()
-                                .rounded(px(7.))
-                                .bg(glass_pill_bg)
-                                .border_1()
-                                .border_color(glass_pill_border)
-                                .text_color(white().opacity(0.90))
-                                .text_xs()
-                                .font_semibold()
-                                .child(fallback_type_label)
-                                .into_any_element()
+                            div().into_any_element()
                         })
+                        // Right button: Paramount+ circular "+" Watchlist button
                         .child(
                             Button::new(bookmark_btn_id)
                                 .small()
                                 .compact()
                                 .selected(bookmarked)
                                 .icon(if bookmarked {
-                                    IconName::StarFill
+                                    IconName::Check
                                 } else {
-                                    IconName::BookOpen
+                                    IconName::Plus
                                 })
                                 .tooltip(if bookmarked {
                                     dict.bookmarks.remove
@@ -287,7 +286,7 @@ pub fn render_poster_card_with_style(
                                 })),
                         ),
                 )
-                // 4. Center Play Button overlay on hover
+                // 4. Center Paramount+ Play Overlay on hover
                 .child(
                     div()
                         .absolute()
@@ -296,7 +295,7 @@ pub fn render_poster_card_with_style(
                         .items_center()
                         .justify_center()
                         .opacity(0.0)
-                        .group_hover("poster-card", |s| s.opacity(1.0))
+                        .group_hover("paramount-card", |s| s.opacity(1.0))
                         .child(
                             div()
                                 .flex()
@@ -304,10 +303,10 @@ pub fn render_poster_card_with_style(
                                 .justify_center()
                                 .size_11()
                                 .rounded_full()
-                                .bg(primary_accent.opacity(0.92))
+                                .bg(primary_accent.opacity(0.95))
                                 .text_color(white())
                                 .border_2()
-                                .border_color(white().opacity(0.40))
+                                .border_color(white().opacity(0.50))
                                 .shadow(vec![BoxShadow {
                                     offset: point(px(0.), px(4.)),
                                     blur_radius: px(16.),
@@ -318,20 +317,19 @@ pub fn render_poster_card_with_style(
                                 .child(Icon::new(IconName::Play).small()),
                         ),
                 )
-                // 5. Bottom Inside Overlay: For Widescreen cards, embedded title + metadata;
-                //    for Tall Poster cards, subtle genre chip
+                // 5. Bottom Paramount+ Watermark / In-card title
                 .child(match card_style {
                     PosterCardStyle::Widescreen => v_flex()
                         .absolute()
                         .left_3()
                         .right_3()
-                        .bottom_3()
+                        .bottom_2p5()
                         .gap_1()
                         .when(title_is_rtl, |col| col.items_end().text_right())
                         .child(
                             div()
                                 .w_full()
-                                .text_base()
+                                .text_sm()
                                 .font_bold()
                                 .line_height(relative(1.2))
                                 .text_color(white())
@@ -345,39 +343,31 @@ pub fn render_poster_card_with_style(
                             directional_row(h_flex(), rtl)
                                 .gap_2()
                                 .text_xs()
-                                .text_color(white().opacity(0.78))
+                                .text_color(hsla(215.0 / 360.0, 0.20, 0.80, 1.0))
                                 .when_some(year.clone(), |row, yr| row.child(yr))
                                 .when_some(first_genre.clone(), |row, g| {
                                     row.child("·").child(g)
                                 }),
                         )
                         .into_any_element(),
-                    PosterCardStyle::Poster => directional_row(h_flex(), rtl)
+                    PosterCardStyle::Poster => div()
                         .absolute()
-                        .left_2p5()
-                        .right_2p5()
-                        .bottom_2p5()
-                        .justify_between()
-                        .items_center()
-                        .when_some(first_genre.clone(), |row, genre| {
-                            row.child(
-                                div()
-                                    .px_2()
-                                    .py_0p5()
-                                    .rounded(px(6.))
-                                    .bg(glass_pill_bg)
-                                    .border_1()
-                                    .border_color(glass_pill_border)
-                                    .text_size(px(10.))
-                                    .font_medium()
-                                    .text_color(white().opacity(0.92))
-                                    .child(genre),
-                            )
-                        })
+                        .left_2()
+                        .right_2()
+                        .bottom_2()
+                        .flex()
+                        .justify_center()
+                        .child(
+                            div()
+                                .text_size(px(10.))
+                                .font_extrabold()
+                                .text_color(white().opacity(0.85))
+                                .child("Paramount+"),
+                        )
                         .into_any_element(),
                 }),
         )
-        // Below-Poster Caption (Paramount+ style — for Tall Poster cards)
+        // Below-Poster Paramount+ Caption (Title + Year · Genre)
         .when(card_style == PosterCardStyle::Poster, |card| {
             card.child(
                 v_flex()
@@ -390,9 +380,9 @@ pub fn render_poster_card_with_style(
                             .w_full()
                             .text_sm()
                             .font_bold()
-                            .line_height(relative(1.28))
+                            .line_height(relative(1.25))
                             .text_color(cx.theme().foreground)
-                            .group_hover("poster-card", move |s| s.text_color(primary_accent))
+                            .group_hover("paramount-card", move |s| s.text_color(primary_accent))
                             .whitespace_nowrap()
                             .overflow_hidden()
                             .text_ellipsis()
@@ -408,7 +398,7 @@ pub fn render_poster_card_with_style(
                             .font_medium()
                             .text_color(cx.theme().muted_foreground)
                             .child(year.unwrap_or_else(|| "—".to_string()))
-                            .child(fallback_type_label),
+                            .child(first_genre.unwrap_or_else(|| fallback_type_label.to_string())),
                     ),
             )
         })

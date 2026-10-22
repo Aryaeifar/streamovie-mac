@@ -125,7 +125,7 @@ impl AccentPalette {
     /// Primary accent color in HSLA matching Paramount+ / Streamovie cinema styling.
     pub fn primary_hsla(self) -> Hsla {
         match self {
-            Self::Paramount => hsla(217.0 / 360.0, 1.0, 0.50, 1.0), // #0066fe Paramount+ Blue
+            Self::Paramount => hsla(216.0 / 360.0, 1.0, 0.50, 1.0), // #0064ff Paramount+ Signature Blue
             Self::Netflix => hsla(357.0 / 360.0, 0.92, 0.47, 1.0),  // #e50914
             Self::Midnight => hsla(258.0 / 360.0, 0.90, 0.66, 1.0), // #8b5cf6
             Self::Aurora => hsla(160.0 / 360.0, 0.84, 0.39, 1.0),   // #10b981
@@ -141,9 +141,9 @@ impl AccentPalette {
         match self {
             // (canvas_bg, card_surface, sidebar_bg)
             Self::Paramount => (
-                hsla(222.0 / 360.0, 0.45, 0.038, 1.0), // #040811 deep cinematic navy canvas
-                hsla(220.0 / 360.0, 0.35, 0.082, 1.0), // #0d1422 deep midnight glass card
-                hsla(224.0 / 360.0, 0.42, 0.045, 1.0), // #050913 sleek sidebar
+                hsla(222.0 / 360.0, 0.52, 0.032, 1.0), // #040711 Paramount+ deep cinema canvas
+                hsla(220.0 / 360.0, 0.38, 0.075, 1.0), // #0a1120 Paramount+ card surface
+                hsla(224.0 / 360.0, 0.58, 0.026, 1.0), // #03050c Paramount+ vertical dock
             ),
             Self::Netflix => (
                 hsla(222.0 / 360.0, 0.42, 0.038, 1.0),
@@ -210,11 +210,11 @@ impl PersistedSettings {
 
         Theme::update(cx, |theme| {
             theme.primary = primary;
-            theme.primary_foreground = hsla(0.0, 0.0, 0.99, 1.0);
+            theme.primary_foreground = hsla(0.0, 0.0, 1.0, 1.0);
             theme.ring = primary;
             theme.sidebar_primary = primary;
-            theme.radius = px(10.);
-            theme.radius_lg = px(16.);
+            theme.radius = px(8.);
+            theme.radius_lg = px(12.);
             theme.font_family = font_family;
 
             if theme.is_dark() {
@@ -224,11 +224,11 @@ impl PersistedSettings {
                 theme.popover_foreground = hsla(215.0 / 360.0, 0.20, 0.98, 1.0);
                 theme.sidebar = dark_sidebar;
                 theme.sidebar_foreground = hsla(215.0 / 360.0, 0.15, 0.92, 1.0);
-                theme.sidebar_border = hsla(215.0 / 360.0, 0.30, 0.85, 0.08);
-                theme.muted = hsla(220.0 / 360.0, 0.25, 0.12, 1.0);
-                theme.muted_foreground = hsla(215.0 / 360.0, 0.15, 0.68, 1.0);
-                theme.border = hsla(215.0 / 360.0, 0.30, 0.85, 0.09);
-                theme.input = hsla(215.0 / 360.0, 0.25, 0.90, 0.10);
+                theme.sidebar_border = hsla(216.0 / 360.0, 0.40, 0.85, 0.08);
+                theme.muted = hsla(220.0 / 360.0, 0.35, 0.11, 1.0);
+                theme.muted_foreground = hsla(215.0 / 360.0, 0.18, 0.65, 1.0);
+                theme.border = hsla(216.0 / 360.0, 0.40, 0.85, 0.09);
+                theme.input = hsla(220.0 / 360.0, 0.35, 0.08, 0.85);
             }
         });
     }

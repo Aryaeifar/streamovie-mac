@@ -1,8 +1,9 @@
-//! Infuse / Stremio / Linear inspired stream and download source cards.
+//! Paramount+ stream and download source cards.
 
 use gpui_kit::{
-    AnyElement, ClipboardItem, Context, InteractiveElement as _, IntoElement, ParentElement as _,
-    SharedString, Styled as _, div, hsla, prelude::FluentBuilder as _, px,
+    AnyElement, BoxShadow, ClipboardItem, Context, InteractiveElement as _, IntoElement,
+    ParentElement as _, SharedString, Styled as _, div, hsla, point, prelude::FluentBuilder as _,
+    px, white,
 };
 use gpui_kit::component::{
     ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt as _, WindowExt as _,
@@ -28,7 +29,7 @@ pub fn render_source_links(
 ) -> AnyElement {
     let dict = locale.dict();
     let rtl = locale.is_rtl();
-    let primary_color = cx.theme().primary;
+    let primary_color = cx.theme().primary; // #0064FF Paramount Blue
     let is_dark = cx.theme().is_dark();
 
     let downloads: Vec<SourceLink> = sources
@@ -53,12 +54,12 @@ pub fn render_source_links(
     }
 
     let surface_bg = if is_dark {
-        hsla(240.0 / 360.0, 0.20, 0.09, 0.85)
+        hsla(220.0 / 360.0, 0.38, 0.08, 0.90) // #0c1322 Paramount+ dark glass
     } else {
         cx.theme().popover
     };
     let border_col = if is_dark {
-        hsla(0.0, 0.0, 1.0, 0.09)
+        hsla(216.0 / 360.0, 0.40, 0.85, 0.12)
     } else {
         cx.theme().border
     };
@@ -69,7 +70,7 @@ pub fn render_source_links(
         let format_badge = source
             .format_type
             .clone()
-            .unwrap_or_else(|| "Direct Stream / MKV".to_string());
+            .unwrap_or_else(|| "Paramount Direct Stream".to_string());
         let is_playable = source.is_playable_video();
         let url_for_open = source.url.clone();
         let url_for_copy = source.url.clone();
@@ -81,14 +82,30 @@ pub fn render_source_links(
 
         source_cards.push(
             v_flex()
-                .w(px(300.))
-                .p_4()
+                .w(px(290.))
+                .p_3p5()
                 .gap_3()
-                .rounded(px(14.))
+                .rounded(px(8.)) // Crisp Paramount+ 8px radius
                 .bg(surface_bg)
                 .border_1()
                 .border_color(border_col)
-                .hover(move |s| s.border_color(primary_color.opacity(0.65)))
+                .shadow(vec![BoxShadow {
+                    offset: point(px(0.), px(2.)),
+                    blur_radius: px(8.),
+                    spread_radius: px(0.),
+                    inset: false,
+                    color: hsla(222.0 / 360.0, 0.50, 0.02, 0.40),
+                }])
+                .hover(move |s| {
+                    s.border_color(primary_color)
+                        .shadow(vec![BoxShadow {
+                            offset: point(px(0.), px(6.)),
+                            blur_radius: px(18.),
+                            spread_radius: px(0.),
+                            inset: false,
+                            color: primary_color.opacity(0.35),
+                        }])
+                })
                 .when(rtl, |this| this.items_end().text_right())
                 .child(
                     directional_row(h_flex(), rtl)
@@ -99,15 +116,16 @@ pub fn render_source_links(
                         .child(
                             directional_row(h_flex(), rtl)
                                 .gap_2()
+                                .items_center()
                                 .child(
                                     div()
                                         .flex()
                                         .items_center()
                                         .justify_center()
                                         .size_7()
-                                        .rounded(px(8.))
-                                        .bg(primary_color.opacity(0.16))
-                                        .text_color(primary_color)
+                                        .rounded(px(6.))
+                                        .bg(primary_color)
+                                        .text_color(white())
                                         .child(
                                             Icon::new(if is_playable {
                                                 IconName::Play
@@ -117,9 +135,20 @@ pub fn render_source_links(
                                             .xsmall(),
                                         ),
                                 )
-                                .child(div().text_sm().font_bold().child(quality.clone())),
+                                .child(
+                                    div()
+                                        .text_sm()
+                                        .font_bold()
+                                        .text_color(white())
+                                        .child(quality.clone()),
+                                ),
                         )
-                        .child(Tag::secondary().small().outline().child(format_badge)),
+                        .child(
+                            Tag::primary()
+                                .small()
+                                .outline()
+                                .child(format_badge),
+                        ),
                 )
                 .child(
                     directional_row(h_flex(), rtl)
@@ -130,7 +159,7 @@ pub fn render_source_links(
                                 .primary()
                                 .small()
                                 .icon(IconName::Play)
-                                .label(dict.actions.watch_online)
+                                .label(dict.actions.watch_now.to_uppercase())
                                 .on_click(move |_, window, cx| {
                                     let url = url_for_open.clone();
                                     let heading = dialog_title.clone();

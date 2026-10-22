@@ -1,5 +1,10 @@
-//! Local Bookmarks / Watchlist view redesigned with an Infuse library header and
-//! cinema poster grid.
+//! Bookmarks / Watchlist screen completely redesigned to match Paramount+ "My List" UI/UX.
+//!
+//! Features:
+//! - Paramount+ "MY WATCHLIST" header with item counter and subtitle
+//! - Filter tabs: "ALL TITLES" | "MOVIES" | "TV SHOWS" in Paramount+ pill styling
+//! - Paramount+ empty state with CTA to explore titles
+//! - Multi-column grid of Paramount+ poster cards with active bookmark state and hover glow
 
 use gpui_kit::{
     AnyElement, Context, IntoElement, ParentElement as _, Styled as _, div,
@@ -48,7 +53,7 @@ pub fn render_bookmarks_view(
             entry.kind,
             true,
             locale,
-            "bookmarks-grid",
+            "paramount-bookmarks-grid",
             cx,
         ));
     }
@@ -56,13 +61,13 @@ pub fn render_bookmarks_view(
     v_flex()
         .w_full()
         .gap_6()
-        .pb_10()
-        // Elevated Watchlist Header Bar
+        .pb_12()
+        // Paramount+ Watchlist Header Bar
         .child(
             directional_row(h_flex(), rtl)
                 .w_full()
                 .p_5()
-                .rounded(cx.theme().radius_lg)
+                .rounded(px(10.))
                 .border_1()
                 .border_color(cx.theme().border)
                 .bg(cx.theme().popover)
@@ -76,7 +81,7 @@ pub fn render_bookmarks_view(
                         .gap_3()
                         .child(
                             div()
-                                .w(px(4.))
+                                .w(px(3.5))
                                 .h(px(26.))
                                 .rounded_full()
                                 .bg(cx.theme().primary),
@@ -92,8 +97,8 @@ pub fn render_bookmarks_view(
                                         .child(
                                             div()
                                                 .text_2xl()
-                                                .font_bold()
-                                                .child(dict.bookmarks.title),
+                                                .font_extrabold()
+                                                .child("MY WATCHLIST"),
                                         )
                                         .child(
                                             Tag::primary().small().outline().child(format_count(
@@ -107,17 +112,17 @@ pub fn render_bookmarks_view(
                                     div()
                                         .text_xs()
                                         .text_color(cx.theme().muted_foreground)
-                                        .child(dict.bookmarks.subtitle),
+                                        .child("Quickly access movies and TV shows you've saved to watch on Paramount+."),
                                 ),
                         ),
                 )
                 .child(
-                    TabBar::new("bookmarks-filter-tabs")
-                        .segmented()
+                    TabBar::new("paramount-bookmarks-filter-tabs")
+                        .pill()
                         .selected_index(filter_tab.index())
-                        .child(Tab::new().label(dict.browse.all_types))
-                        .child(Tab::new().label(dict.browse.movies))
-                        .child(Tab::new().label(dict.browse.series))
+                        .child(Tab::new().label("ALL TITLES"))
+                        .child(Tab::new().label("MOVIES"))
+                        .child(Tab::new().label("TV SHOWS"))
                         .on_click(cx.listener(|this, ix: &usize, _, cx| {
                             this.set_bookmarks_filter_tab(MediaFilterTab::from_index(*ix), cx);
                         })),
@@ -133,15 +138,18 @@ pub fn render_bookmarks_view(
                                 .with_variant(EmptyMediaVariant::Icon)
                                 .child(Icon::new(IconName::BookOpen)),
                         )
-                        .title(EmptyTitle::new().child(dict.bookmarks.empty_title))
-                        .description(EmptyDescription::new().child(dict.bookmarks.empty_body)),
+                        .title(EmptyTitle::new().child("Your Watchlist is empty"))
+                        .description(EmptyDescription::new().child(
+                            "Explore Paramount+ movies and series and click '+' to add them to your Watchlist.",
+                        )),
                 )
                 .content(
                     EmptyContent::new().child(
-                        Button::new("bookmarks-browse-cta")
+                        Button::new("paramount-bookmarks-browse-cta")
                             .primary()
+                            .large()
                             .icon(IconName::LayoutDashboard)
-                            .label(dict.actions.browse)
+                            .label("BROWSE FEATURED TITLES")
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.select_section(NavSection::Home, cx);
                             })),

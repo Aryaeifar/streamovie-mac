@@ -1,5 +1,10 @@
-//! Filterable, paginated Movies and Series catalog grid view redesigned with a
-//! Linear + Infuse 8 filter bar and cinema poster grid.
+//! List / Catalog screen completely redesigned to match Paramount+ Browse UI/UX.
+//!
+//! Features:
+//! - Paramount+ high-impact catalog header with section title, subtitle, and results counter
+//! - Paramount+ dark glass filter surface with Sort pills (Latest / IMDb Top Rated) and Genre pills
+//! - Clean multi-column grid of Paramount+ poster cards with hover elevation and luminous glow
+//! - Paramount+ "LOAD MORE" CTA button
 
 use gpui_kit::{
     AnyElement, Context, IntoElement, ParentElement as _, SharedString, Styled as _, div,
@@ -34,15 +39,15 @@ pub fn render_catalog_view(
     let rtl = locale.is_rtl();
     let state = app.catalog_state(category).clone();
     let genres = app.genres().to_vec();
-    let radius_lg = cx.theme().radius_lg;
+    let radius = cx.theme().radius; // 8px
 
     let heading_title = match category {
-        MediaCategory::Movie => dict.nav.movies,
-        MediaCategory::Series => dict.nav.series,
+        MediaCategory::Movie => "MOVIES",
+        MediaCategory::Series => "TV SHOWS",
     };
     let heading_subtitle = match category {
-        MediaCategory::Movie => dict.home.movies_subtitle,
-        MediaCategory::Series => dict.home.series_subtitle,
+        MediaCategory::Movie => "Explore blockbuster movies, exclusive premieres, and iconic cinema classics.",
+        MediaCategory::Series => "Stream full seasons, hit original series, and binge-worthy drama in 4K UHD.",
     };
 
     let selected_sort_ix = match state.sort {
@@ -50,19 +55,19 @@ pub fn render_catalog_view(
         BrowseSort::Imdb => 1,
     };
 
-    let sort_tab_id = SharedString::from(format!("catalog-sort-tabs-{}", category.as_str()));
+    let sort_tab_id = SharedString::from(format!("paramount-catalog-sort-{}", category.as_str()));
     let scope_key = format!("catalog-{}", category.as_str());
 
     let mut genre_buttons = Vec::new();
     if !genres.is_empty() {
         let active_genre = state.genre_id;
         genre_buttons.push(
-            Button::new("genre-all")
+            Button::new("paramount-genre-all")
                 .small()
                 .selected(active_genre == 0)
                 .when(active_genre == 0, |btn| btn.primary())
                 .when(active_genre != 0, |btn| btn.outline())
-                .label(dict.browse.all_genres)
+                .label(dict.browse.all_genres.to_uppercase())
                 .on_click(cx.listener(move |this, _, _, cx| {
                     this.set_catalog_genre(category, 0, cx);
                 })),
@@ -71,12 +76,12 @@ pub fn render_catalog_view(
             let gid = genre.id;
             let is_selected = active_genre == gid;
             genre_buttons.push(
-                Button::new(SharedString::from(format!("genre-pill-{gid}")))
+                Button::new(SharedString::from(format!("paramount-genre-{gid}")))
                     .small()
                     .selected(is_selected)
                     .when(is_selected, |btn| btn.primary())
                     .when(!is_selected, |btn| btn.outline())
-                    .label(genre.display_name())
+                    .label(genre.display_name().to_uppercase())
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.set_catalog_genre(category, gid, cx);
                     })),
@@ -100,14 +105,14 @@ pub fn render_catalog_view(
     v_flex()
         .w_full()
         .gap_6()
-        .pb_10()
-        // Linear-inspired Elevated Filter & Sort Surface
+        .pb_12()
+        // Paramount+ Catalog Header & Filter Surface
         .child(
             v_flex()
                 .w_full()
                 .p_5()
                 .gap_4()
-                .rounded(cx.theme().radius_lg)
+                .rounded(px(10.))
                 .border_1()
                 .border_color(cx.theme().border)
                 .bg(cx.theme().popover)
@@ -124,7 +129,7 @@ pub fn render_catalog_view(
                                 .gap_3()
                                 .child(
                                     div()
-                                        .w(px(4.))
+                                        .w(px(3.5))
                                         .h(px(26.))
                                         .rounded_full()
                                         .bg(cx.theme().primary),
@@ -140,11 +145,11 @@ pub fn render_catalog_view(
                                                 .child(
                                                     div()
                                                         .text_2xl()
-                                                        .font_bold()
+                                                        .font_extrabold()
                                                         .child(heading_title),
                                                 )
                                                 .child(
-                                                    Tag::secondary()
+                                                    Tag::primary()
                                                         .small()
                                                         .outline()
                                                         .child(format_count(
@@ -162,6 +167,7 @@ pub fn render_catalog_view(
                                         ),
                                 ),
                         )
+                        // Paramount+ Sort Tabs
                         .child(
                             directional_row(h_flex(), rtl)
                                 .items_center()
@@ -169,16 +175,16 @@ pub fn render_catalog_view(
                                 .child(
                                     div()
                                         .text_xs()
-                                        .font_semibold()
+                                        .font_bold()
                                         .text_color(cx.theme().muted_foreground)
-                                        .child(dict.browse.sort),
+                                        .child("SORT:"),
                                 )
                                 .child(
                                     TabBar::new(sort_tab_id)
-                                        .segmented()
+                                        .pill()
                                         .selected_index(selected_sort_ix)
-                                        .child(Tab::new().label(dict.browse.sort_latest))
-                                        .child(Tab::new().label(dict.browse.sort_imdb))
+                                        .child(Tab::new().label("RECENTLY ADDED"))
+                                        .child(Tab::new().label("TOP RATED (IMDb)"))
                                         .on_click(cx.listener(move |this, ix: &usize, _, cx| {
                                             let next_sort = if *ix == 1 {
                                                 BrowseSort::Imdb
@@ -192,7 +198,7 @@ pub fn render_catalog_view(
                                     state.genre_id > 0 || state.sort != BrowseSort::Created,
                                     |row| {
                                         row.child(
-                                            Button::new("catalog-reset-filters")
+                                            Button::new("paramount-catalog-clear")
                                                 .small()
                                                 .outline()
                                                 .icon(IconName::Undo2)
@@ -222,10 +228,10 @@ pub fn render_catalog_view(
                 v_flex()
                     .w_full()
                     .gap_2()
-                    .child(Alert::error("catalog-error", err).title(dict.browse.load_error))
+                    .child(Alert::error("paramount-catalog-error", err).title(dict.browse.load_error))
                     .child(
                         directional_row(h_flex(), rtl).child(
-                            Button::new("catalog-retry")
+                            Button::new("paramount-catalog-retry")
                                 .small()
                                 .outline()
                                 .icon(IconName::RefreshCw)
@@ -237,7 +243,7 @@ pub fn render_catalog_view(
                     ),
             )
         })
-        // Grid Body
+        // Catalog Grid Body
         .child(if state.loading && cards.is_empty() {
             h_flex()
                 .w_full()
@@ -245,9 +251,9 @@ pub fn render_catalog_view(
                 .gap_4()
                 .children((0..12).map(move |_| {
                     Skeleton::new()
-                        .w(px(196.))
-                        .h(px(294.))
-                        .rounded(radius_lg)
+                        .w(px(192.))
+                        .h(px(288.))
+                        .rounded(radius)
                 }))
                 .into_any_element()
         } else if cards.is_empty() {
@@ -279,16 +285,16 @@ pub fn render_catalog_view(
                 )
                 .when(state.has_more, |col| {
                     col.child(
-                        h_flex().w_full().justify_center().pt_2().child(
-                            Button::new("catalog-load-more")
+                        h_flex().w_full().justify_center().pt_3().child(
+                            Button::new("paramount-catalog-load-more")
                                 .primary()
                                 .large()
                                 .loading(state.loading_more)
                                 .icon(IconName::Plus)
                                 .label(if state.loading_more {
-                                    dict.browse.loading_more
+                                    "LOADING TITLES...".to_string()
                                 } else {
-                                    dict.browse.load_more
+                                    "LOAD MORE TITLES".to_string()
                                 })
                                 .on_click(cx.listener(move |this, _, _, cx| {
                                     this.load_more_catalog(category, cx);

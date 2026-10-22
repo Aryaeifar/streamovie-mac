@@ -1,5 +1,9 @@
-//! Live catalog Search view redesigned with a Linear/Spotlight search header and
-//! Infuse poster grid.
+//! Search screen completely redesigned to match Paramount+ Search UI/UX.
+//!
+//! Features:
+//! - Paramount+ high-impact search hero header with category filter pills
+//! - Sleek dark glass input with Paramount Blue focus glow and clean button
+//! - Instant results counter and responsive multi-column grid of Paramount+ poster cards
 
 use gpui_kit::{
     AnyElement, Context, IntoElement, ParentElement as _, Styled as _, div,
@@ -50,7 +54,7 @@ pub fn render_search_view(
             kind,
             app.is_bookmarked(media.id),
             locale,
-            "search-results",
+            "paramount-search-results",
             cx,
         ));
     }
@@ -58,14 +62,14 @@ pub fn render_search_view(
     v_flex()
         .w_full()
         .gap_6()
-        .pb_10()
-        // Elevated Spotlight Search Panel
+        .pb_12()
+        // Paramount+ Search Panel
         .child(
             v_flex()
                 .w_full()
-                .p_5()
+                .p_6()
                 .gap_4()
-                .rounded(cx.theme().radius_lg)
+                .rounded(px(10.))
                 .border_1()
                 .border_color(cx.theme().border)
                 .bg(cx.theme().popover)
@@ -82,7 +86,7 @@ pub fn render_search_view(
                                 .gap_3()
                                 .child(
                                     div()
-                                        .w(px(4.))
+                                        .w(px(3.5))
                                         .h(px(26.))
                                         .rounded_full()
                                         .bg(cx.theme().primary),
@@ -98,12 +102,12 @@ pub fn render_search_view(
                                                 .child(
                                                     div()
                                                         .text_2xl()
-                                                        .font_bold()
-                                                        .child(dict.nav.search),
+                                                        .font_extrabold()
+                                                        .child("SEARCH"),
                                                 )
                                                 .when(!search.query.trim().is_empty(), |row| {
                                                     row.child(
-                                                        Tag::secondary()
+                                                        Tag::primary()
                                                             .small()
                                                             .outline()
                                                             .child(format_count(
@@ -118,22 +122,24 @@ pub fn render_search_view(
                                             div()
                                                 .text_xs()
                                                 .text_color(cx.theme().muted_foreground)
-                                                .child(dict.search.hint),
+                                                .child("Search by title, character, actor, or genre across Paramount+."),
                                         ),
                                 ),
                         )
+                        // Filter Pills: ALL | MOVIES | TV SHOWS
                         .child(
-                            TabBar::new("search-filter-tabs")
-                                .segmented()
+                            TabBar::new("paramount-search-filter-tabs")
+                                .pill()
                                 .selected_index(search.filter_tab.index())
-                                .child(Tab::new().label(dict.browse.all_types))
-                                .child(Tab::new().label(dict.browse.movies))
-                                .child(Tab::new().label(dict.browse.series))
+                                .child(Tab::new().label("ALL"))
+                                .child(Tab::new().label("MOVIES"))
+                                .child(Tab::new().label("TV SHOWS"))
                                 .on_click(cx.listener(|this, ix: &usize, _, cx| {
                                     this.set_search_filter_tab(MediaFilterTab::from_index(*ix), cx);
                                 })),
                         ),
                 )
+                // Search Input Box & Submit Button
                 .child(
                     directional_row(h_flex(), rtl)
                         .w_full()
@@ -146,17 +152,17 @@ pub fn render_search_view(
                                     .prefix(
                                         Icon::new(IconName::Search)
                                             .small()
-                                            .text_color(cx.theme().muted_foreground),
+                                            .text_color(cx.theme().primary),
                                     ),
                             ),
                         )
                         .child(
-                            Button::new("search-submit-btn")
+                            Button::new("paramount-search-submit-btn")
                                 .primary()
                                 .large()
                                 .loading(search.loading)
                                 .icon(IconName::Search)
-                                .label(dict.nav.search)
+                                .label("SEARCH")
                                 .on_click(cx.listener(|this, _, _, cx| {
                                     this.trigger_search_now(cx);
                                 })),
@@ -172,7 +178,7 @@ pub fn render_search_view(
                     .child(Alert::error("search-error-banner", err).title(dict.search.failed))
                     .child(
                         directional_row(h_flex(), rtl).child(
-                            Button::new("search-retry-btn")
+                            Button::new("paramount-search-retry-btn")
                                 .small()
                                 .outline()
                                 .icon(IconName::RefreshCw)
@@ -197,7 +203,7 @@ pub fn render_search_view(
                     div()
                         .text_sm()
                         .text_color(cx.theme().muted_foreground)
-                        .child(dict.search.searching),
+                        .child("Searching the Paramount+ catalog..."),
                 )
                 .into_any_element()
         } else if search.query.trim().is_empty() {
@@ -209,8 +215,10 @@ pub fn render_search_view(
                                 .with_variant(EmptyMediaVariant::Icon)
                                 .child(Icon::new(IconName::Search)),
                         )
-                        .title(EmptyTitle::new().child(dict.search.label))
-                        .description(EmptyDescription::new().child(dict.search.hint)),
+                        .title(EmptyTitle::new().child("Find Your Next Obsession"))
+                        .description(EmptyDescription::new().child(
+                            "Type in the search box above to instantly discover blockbuster films and original series.",
+                        )),
                 )
                 .into_any_element()
         } else if cards.is_empty() {
@@ -222,8 +230,10 @@ pub fn render_search_view(
                                 .with_variant(EmptyMediaVariant::Icon)
                                 .child(Icon::new(IconName::Search)),
                         )
-                        .title(EmptyTitle::new().child(dict.search.empty))
-                        .description(EmptyDescription::new().child(dict.browse.empty_hint)),
+                        .title(EmptyTitle::new().child("No Matching Titles Found"))
+                        .description(EmptyDescription::new().child(
+                            "Check your spelling or try searching for a different movie, series, or actor.",
+                        )),
                 )
                 .into_any_element()
         } else {

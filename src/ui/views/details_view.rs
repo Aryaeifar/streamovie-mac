@@ -1,10 +1,12 @@
-//! Rich Title Details view redesigned with an Infuse 8 + Apple TV + Stremio aesthetic.
+//! Rich Title Details view completely redesigned with Paramount+ aesthetic.
+//!
 //! Features:
-//! - Full-bleed backdrop hero stage (`min_h(px(430.))`) with `render_remote_image` and dual `linear_gradient` scrims
-//! - Floating `230x345` (`2:3`) poster card with shadow elevation and glass hairline border
-//! - Gold IMDb pill, quality badge, metadata pills, genre tags, and primary action bar
-//! - 4-column OMDb glassmorphic scorecard row + structured catalog metadata
-//! - Season pill selector + widescreen (`168x96`) episode guide cards with direct stream/download actions
+//! - Full-bleed backdrop hero stage with dual gradient scrims and Paramount+ branding
+//! - Floating 2:3 cinema poster card with crisp 8px corners and luminous Paramount Blue shadow
+//! - Neon cyan status kicker ("NOW STREAMING"), metadata row (DRAMA · YEAR · TV-MA · 4K UHD · ★ IMDb)
+//! - Primary electric Paramount Blue ("#0064FF") "▶ WATCH NOW" CTA + Watchlist "+" + Trailer actions
+//! - OMDb / IMDb scorecards and catalog metadata
+//! - Paramount+ Season pill selector + widescreen (180x101) episode guide cards with direct stream and download options
 
 use gpui_kit::{
     AnyElement, BoxShadow, Context, IntoElement, ParentElement as _, Styled as _, div, hsla,
@@ -64,7 +66,7 @@ pub fn render_details_view(
         app,
         poster_url.as_deref(),
         cover_url.as_deref(),
-        cx.theme().radius_lg,
+        px(8.), // Paramount+ 8px radius
         if category == MediaCategory::Series {
             IconName::Frame
         } else {
@@ -77,7 +79,7 @@ pub fn render_details_view(
     let rating = media.rating_value();
     let year = media.release_year();
     let duration = media.duration_label();
-    let classification = media.classification_label();
+    let classification = media.classification_label().unwrap_or_else(|| "TV-MA".to_string());
     let genres = media.genre_list();
     let countries = media.country_list();
     let sources = media.source_links();
@@ -89,20 +91,24 @@ pub fn render_details_view(
     let parsed = media.parsed_description();
 
     let media_for_bookmark = media.clone();
+    let media_for_watch = media.clone();
+    let primary_accent = cx.theme().primary; // #0064FF
+    let cyan_kicker = hsla(188.0 / 360.0, 1.0, 0.52, 1.0); // #00E5FF
+
     let gold_bg = hsla(45.0 / 360.0, 0.95, 0.50, 0.22);
     let gold_fg = hsla(46.0 / 360.0, 0.98, 0.65, 1.0);
     let gold_border = hsla(45.0 / 360.0, 0.95, 0.52, 0.50);
 
-    let stage_bg = hsla(222.0 / 360.0, 0.65, 0.04, 1.0);
+    let stage_bg = hsla(222.0 / 360.0, 0.52, 0.032, 1.0);
     let scrim_bottom = linear_gradient(
         0.0,
-        linear_color_stop(hsla(222.0 / 360.0, 0.65, 0.035, 1.0), 0.0),
-        linear_color_stop(hsla(222.0 / 360.0, 0.40, 0.05, 0.35), 1.0),
+        linear_color_stop(stage_bg.opacity(0.98), 0.0),
+        linear_color_stop(stage_bg.opacity(0.0), 0.75),
     );
     let scrim_side = linear_gradient(
         if rtl { 270.0 } else { 90.0 },
-        linear_color_stop(hsla(222.0 / 360.0, 0.65, 0.035, 0.96), 0.0),
-        linear_color_stop(hsla(222.0 / 360.0, 0.40, 0.05, 0.20), 1.0),
+        linear_color_stop(stage_bg.opacity(0.98), 0.0),
+        linear_color_stop(stage_bg.opacity(0.10), 0.90),
     );
 
     let omdb_section = render_omdb_enrichment_card(details, app, cx);
@@ -112,10 +118,10 @@ pub fn render_details_view(
         .w_full()
         .gap_6()
         .pb_12()
-        // Back Navigation Bar
+        // Paramount+ Back Navigation Bar
         .child(
             directional_row(h_flex(), rtl).w_full().child(
-                Button::new("details-back-btn")
+                Button::new("paramount-details-back-btn")
                     .outline()
                     .small()
                     .icon(if rtl {
@@ -123,7 +129,7 @@ pub fn render_details_view(
                     } else {
                         IconName::ArrowLeft
                     })
-                    .label(dict.details.back)
+                    .label(dict.details.back.to_uppercase())
                     .on_click(cx.listener(|this, _, _, cx| {
                         this.close_details(cx);
                     })),
@@ -134,19 +140,53 @@ pub fn render_details_view(
             div()
                 .relative()
                 .w_full()
-                .min_h(px(460.))
-                .rounded(cx.theme().radius_lg)
+                .min_h(px(480.))
+                .rounded(px(14.))
                 .border_1()
-                .border_color(hsla(215.0 / 360.0, 0.30, 0.85, 0.08))
+                .border_color(hsla(216.0 / 360.0, 0.40, 0.85, 0.12))
                 .bg(stage_bg)
-                .shadow_xl()
+                .shadow_2xl()
                 .overflow_hidden()
                 // 1. Full-bleed Backdrop Image
                 .child(div().absolute().inset_0().child(backdrop_el))
                 // 2. Dual Cinematic Gradient Scrims
                 .child(div().absolute().inset_0().bg(scrim_side))
                 .child(div().absolute().inset_0().bg(scrim_bottom))
-                // 3. Foreground Poster + Metadata + CTA Bar
+                // 3. Top-Right Paramount+ Original Watermark
+                .child(
+                    directional_row(h_flex(), rtl)
+                        .absolute()
+                        .top_5()
+                        .when(!rtl, |el| el.right_6())
+                        .when(rtl, |el| el.left_6())
+                        .items_center()
+                        .gap_2()
+                        .px_3()
+                        .py_1p5()
+                        .rounded(px(6.))
+                        .bg(hsla(222.0 / 360.0, 0.50, 0.05, 0.65))
+                        .border_1()
+                        .border_color(hsla(0.0, 0.0, 1.0, 0.15))
+                        .child(
+                            div()
+                                .text_size(px(13.))
+                                .font_extrabold()
+                                .text_color(white())
+                                .child("Paramount+"),
+                        )
+                        .child(
+                            div()
+                                .px_1p5()
+                                .py_0p5()
+                                .rounded(px(3.))
+                                .bg(primary_accent)
+                                .text_size(px(9.5))
+                                .font_bold()
+                                .text_color(white())
+                                .child("ORIGINAL"),
+                        ),
+                )
+                // 4. Foreground Poster + Metadata + CTA Bar
                 .child(
                     directional_row(h_flex(), rtl)
                         .relative()
@@ -154,27 +194,27 @@ pub fn render_details_view(
                         .items_end()
                         .gap_7()
                         .p_7()
-                        // Floating 2:3 Cinema Poster (230x345)
+                        // Floating 2:3 Cinema Poster (210x315) with Paramount+ Blue Shadow
                         .child(
                             div()
-                                .w(px(230.))
-                                .h(px(345.))
+                                .w(px(210.))
+                                .h(px(315.))
                                 .flex_shrink_0()
-                                .rounded(px(14.))
+                                .rounded(px(8.))
                                 .border_1()
-                                .border_color(hsla(215.0 / 360.0, 0.40, 0.90, 0.20))
+                                .border_color(hsla(216.0 / 360.0, 0.40, 0.85, 0.20))
                                 .bg(cx.theme().muted)
                                 .shadow(vec![
                                     BoxShadow {
-                                        offset: point(px(0.), px(12.)),
-                                        blur_radius: px(30.),
+                                        offset: point(px(0.), px(10.)),
+                                        blur_radius: px(26.),
                                         spread_radius: px(0.),
                                         inset: false,
-                                        color: hsla(217.0 / 360.0, 0.90, 0.50, 0.35),
+                                        color: primary_accent.opacity(0.40),
                                     },
                                     BoxShadow {
-                                        offset: point(px(0.), px(8.)),
-                                        blur_radius: px(16.),
+                                        offset: point(px(0.), px(6.)),
+                                        blur_radius: px(14.),
                                         spread_radius: px(0.),
                                         inset: false,
                                         color: hsla(0., 0., 0., 0.90),
@@ -188,71 +228,128 @@ pub fn render_details_view(
                             v_flex()
                                 .flex_1()
                                 .min_w_0()
-                                .gap_3p5()
+                                .gap_3()
                                 .when(rtl, |this| this.items_end().text_right())
-                                // Badges Row
+                                // Status Kicker: "NOW STREAMING" in neon cyan
+                                .child(
+                                    directional_row(h_flex(), rtl)
+                                        .items_center()
+                                        .gap_2()
+                                        .child(
+                                            div()
+                                                .size(px(6.))
+                                                .rounded_full()
+                                                .bg(cyan_kicker),
+                                        )
+                                        .child(
+                                            div()
+                                                .text_xs()
+                                                .font_extrabold()
+                                                .text_color(cyan_kicker)
+                                                .child("NOW STREAMING"),
+                                        ),
+                                )
+                                // Display Title
+                                .child(
+                                    div()
+                                        .text_size(px(38.))
+                                        .font_extrabold()
+                                        .line_height(relative(1.10))
+                                        .text_color(white())
+                                        .when(title_rtl, |this| this.text_right())
+                                        .child(title.clone()),
+                                )
+                                // Paramount+ Metadata Row: GENRE · YEAR · TV-MA · RUNTIME · 4K UHD · ★ IMDb
                                 .child(
                                     directional_row(h_flex(), rtl)
                                         .flex_wrap()
                                         .items_center()
                                         .gap_2()
-                                        .child(Tag::primary().small().child(
-                                            if category == MediaCategory::Series {
-                                                dict.details.series
-                                            } else {
-                                                dict.details.movie
-                                            },
-                                        ))
-                                        .when(rating > 0.0, |row| {
-                                            row.child(
-                                                Tag::custom(gold_bg, gold_fg, gold_border)
-                                                    .small()
-                                                    .child(
-                                                        h_flex()
-                                                            .gap_1()
-                                                            .items_center()
-                                                            .child(
-                                                                Icon::new(IconName::StarFill)
-                                                                    .xsmall(),
-                                                            )
-                                                            .child(format!("{rating:.1} IMDb")),
-                                                    ),
-                                            )
-                                        })
-                                        .when_some(best_quality, |row, q| {
-                                            row.child(
-                                                Tag::info().small().outline().child(format!(
-                                                    "{}: {q}",
-                                                    dict.details.latest_quality
-                                                )),
+                                        .text_xs()
+                                        .font_semibold()
+                                        .text_color(hsla(215.0 / 360.0, 0.20, 0.80, 1.0))
+                                        // Category / Genre
+                                        .child(
+                                            div()
+                                                .font_bold()
+                                                .text_color(white())
+                                                .child(if category == MediaCategory::Series {
+                                                    "SERIES"
+                                                } else {
+                                                    "MOVIE"
+                                                }),
+                                        )
+                                        .when(!genres.is_empty(), |row| {
+                                            row.child(div().child("·")).child(
+                                                div().child(genres[0].to_uppercase()),
                                             )
                                         })
                                         .when_some(year, |row, y| {
-                                            row.child(Tag::secondary().small().outline().child(y))
+                                            row.child(div().child("·")).child(div().child(y))
                                         })
+                                        // Content rating badge
+                                        .child(div().child("·"))
+                                        .child(
+                                            div()
+                                                .px_1p5()
+                                                .py_0p5()
+                                                .rounded(px(4.))
+                                                .border_1()
+                                                .border_color(hsla(0.0, 0.0, 1.0, 0.25))
+                                                .bg(hsla(220.0 / 360.0, 0.35, 0.08, 0.70))
+                                                .text_size(px(10.))
+                                                .font_bold()
+                                                .text_color(white())
+                                                .child(classification),
+                                        )
                                         .when_some(duration, |row, d| {
-                                            row.child(Tag::secondary().small().outline().child(d))
+                                            row.child(div().child("·")).child(div().child(d))
                                         })
-                                        .when_some(classification, |row, c| {
-                                            row.child(Tag::warning().small().outline().child(c))
+                                        // 4K UHD Badge
+                                        .child(div().child("·"))
+                                        .child(
+                                            div()
+                                                .px_1p5()
+                                                .py_0p5()
+                                                .rounded(px(4.))
+                                                .border_1()
+                                                .border_color(hsla(0.0, 0.0, 1.0, 0.25))
+                                                .bg(hsla(220.0 / 360.0, 0.35, 0.08, 0.70))
+                                                .text_size(px(10.))
+                                                .font_bold()
+                                                .text_color(white())
+                                                .child("4K UHD"),
+                                        )
+                                        .when_some(best_quality, |row, q| {
+                                            row.child(div().child("·")).child(
+                                                div().text_color(primary_accent).child(q),
+                                            )
+                                        })
+                                        .when(rating > 0.0, |row| {
+                                            row.child(div().child("·")).child(
+                                                h_flex()
+                                                    .gap_1()
+                                                    .items_center()
+                                                    .px_2()
+                                                    .py_0p5()
+                                                    .rounded(px(4.))
+                                                    .bg(gold_bg)
+                                                    .border_1()
+                                                    .border_color(gold_border)
+                                                    .text_xs()
+                                                    .font_bold()
+                                                    .text_color(gold_fg)
+                                                    .child(Icon::new(IconName::StarFill).xsmall())
+                                                    .child(format!("{rating:.1}")),
+                                            )
                                         }),
                                 )
-                                // Title
-                                .child(
-                                    div()
-                                        .text_size(px(34.))
-                                        .font_extrabold()
-                                        .line_height(relative(1.12))
-                                        .text_color(white())
-                                        .when(title_rtl, |this| this.text_right())
-                                        .child(title.clone()),
-                                )
-                                // Genres & Countries
+                                // Genres & Countries pills
                                 .when(!genres.is_empty() || !countries.is_empty(), |col| {
                                     col.child(
                                         directional_row(h_flex(), rtl)
                                             .flex_wrap()
-                                            .gap_2()
+                                            .gap_1p5()
                                             .children(
                                                 genres
                                                     .into_iter()
@@ -268,34 +365,51 @@ pub fn render_details_view(
                                     let ov_rtl = is_persian_text(&overview) || rtl;
                                     col.child(
                                         div()
-                                            .max_w(px(760.))
+                                            .max_w(px(740.))
                                             .text_sm()
-                                            .line_height(relative(1.65))
+                                            .line_height(relative(1.6))
                                             .text_color(hsla(0.0, 0.0, 0.90, 1.0))
                                             .when(ov_rtl, |this| this.text_right())
                                             .child(overview),
                                     )
                                 })
-                                // Primary CTA Buttons
+                                // Primary Paramount+ Action Bar
                                 .child(
                                     directional_row(h_flex(), rtl)
                                         .pt_2()
                                         .flex_wrap()
+                                        .items_center()
                                         .gap_3()
+                                        // Primary Watch Now CTA
                                         .child(
-                                            Button::new("details-bookmark-btn")
+                                            Button::new("paramount-details-watch")
                                                 .primary()
                                                 .large()
+                                                .icon(IconName::Play)
+                                                .label(dict.actions.watch_now.to_uppercase())
+                                                .on_click(cx.listener(move |this, _, _, cx| {
+                                                    this.open_details(
+                                                        media_for_watch.clone(),
+                                                        category,
+                                                        cx,
+                                                    );
+                                                })),
+                                        )
+                                        // Watchlist "+" Button
+                                        .child(
+                                            Button::new("paramount-details-bm-btn")
+                                                .large()
+                                                .outline()
                                                 .selected(bookmarked)
                                                 .icon(if bookmarked {
-                                                    IconName::StarFill
+                                                    IconName::Check
                                                 } else {
-                                                    IconName::BookOpen
+                                                    IconName::Plus
                                                 })
                                                 .label(if bookmarked {
-                                                    dict.bookmarks.remove
+                                                    dict.bookmarks.remove.to_uppercase()
                                                 } else {
-                                                    dict.bookmarks.add
+                                                    dict.bookmarks.add.to_uppercase()
                                                 })
                                                 .on_click(cx.listener(move |this, _, window, cx| {
                                                     let added = this.toggle_bookmark(
@@ -311,8 +425,9 @@ pub fn render_details_view(
                                                     window.push_notification(msg, cx);
                                                 })),
                                         )
+                                        // Like Button
                                         .child(
-                                            Button::new("details-like-btn")
+                                            Button::new("paramount-details-like")
                                                 .large()
                                                 .outline()
                                                 .selected(liked)
@@ -326,14 +441,15 @@ pub fn render_details_view(
                                                     this.toggle_like(media_id, cx);
                                                 })),
                                         )
+                                        // Trailer Button
                                         .when_some(trailer, |row, tr| {
                                             let url = tr.url.clone();
                                             row.child(
-                                                Button::new("details-trailer-btn")
+                                                Button::new("paramount-details-trailer")
                                                     .large()
                                                     .outline()
                                                     .icon(IconName::Play)
-                                                    .label(dict.actions.watch_trailer)
+                                                    .label(dict.actions.watch_trailer.to_uppercase())
                                                     .on_click(move |_, _, _| {
                                                         let _ = std::process::Command::new("open")
                                                             .arg(&url)
@@ -413,7 +529,7 @@ fn render_omdb_enrichment_card(
                             )
                             .child(CardTitle::new().child(dict.details.show_info)),
                     )
-                    .child(Tag::secondary().small().outline().child("OMDb · IMDb")),
+                    .child(Tag::primary().small().outline().child("Paramount+ · OMDb")),
             ),
         )
         .child(CardContent::new().child(if details.omdb_loading {
@@ -499,7 +615,7 @@ fn render_omdb_enrichment_card(
                                 div()
                                     .px_3()
                                     .py_1p5()
-                                    .rounded(cx.theme().radius)
+                                    .rounded(px(6.))
                                     .border_1()
                                     .border_color(cx.theme().border)
                                     .bg(cx.theme().background)
@@ -586,9 +702,9 @@ fn render_downloads_and_seasons_panel(
                                 .text_color(cx.theme().primary),
                         )
                         .child(CardTitle::new().child(if is_movie {
-                            dict.details.download_movie
+                            dict.details.download_movie.to_uppercase()
                         } else {
-                            dict.details.download_episodes
+                            dict.details.download_episodes.to_uppercase()
                         })),
                 )
                 .child(CardDescription::new().child(if is_movie {
@@ -677,7 +793,7 @@ fn render_downloads_and_seasons_panel(
                     div()
                         .w_full()
                         .p_4()
-                        .rounded(px(14.))
+                        .rounded(px(8.)) // Crisp Paramount+ 8px radius
                         .border_1()
                         .border_color(cx.theme().border)
                         .bg(cx.theme().popover)
@@ -685,7 +801,7 @@ fn render_downloads_and_seasons_panel(
                             v_flex()
                                 .w_full()
                                 .gap_3p5()
-                                // Top row: 16:9 Episode Still Thumbnail + Episode Header
+                                // Top row: 16:9 Episode Thumbnail + Episode Details
                                 .child(
                                     directional_row(h_flex(), rtl)
                                         .w_full()
@@ -697,22 +813,22 @@ fn render_downloads_and_seasons_panel(
                                                 .items_center()
                                                 .gap_3p5()
                                                 .min_w_0()
-                                                // Widescreen 168x96 Episode Thumbnail (Paramount+ style)
+                                                // Widescreen 180x101 Episode Thumbnail (Paramount+ style)
                                                 .child(
                                                     div()
                                                         .relative()
-                                                        .w(px(168.))
-                                                        .h(px(96.))
+                                                        .w(px(180.))
+                                                        .h(px(101.))
                                                         .flex_shrink_0()
-                                                        .rounded(px(10.))
+                                                        .rounded(px(8.))
                                                         .border_1()
-                                                        .border_color(hsla(215.0 / 360.0, 0.30, 0.85, 0.14))
+                                                        .border_color(hsla(216.0 / 360.0, 0.40, 0.85, 0.14))
                                                         .overflow_hidden()
                                                         .child(render_remote_image(
                                                             app,
                                                             episode_thumb_url.as_deref(),
                                                             episode_fallback_url.as_deref(),
-                                                            cx.theme().radius,
+                                                            px(8.),
                                                             IconName::Play,
                                                             None,
                                                             cx,
@@ -721,7 +837,7 @@ fn render_downloads_and_seasons_panel(
                                                             div()
                                                                 .absolute()
                                                                 .inset_0()
-                                                                .bg(hsla(0.0, 0.0, 0.0, 0.32))
+                                                                .bg(hsla(0.0, 0.0, 0.0, 0.35))
                                                                 .flex()
                                                                 .items_center()
                                                                 .justify_center()
@@ -729,17 +845,13 @@ fn render_downloads_and_seasons_panel(
                                                                     div()
                                                                         .size_8()
                                                                         .rounded_full()
-                                                                        .bg(hsla(
-                                                                            0.0, 0.0, 0.0, 0.65,
-                                                                        ))
+                                                                        .bg(cx.theme().primary.opacity(0.90))
                                                                         .border_1()
-                                                                        .border_color(hsla(
-                                                                            0.0, 0.0, 1.0, 0.25,
-                                                                        ))
+                                                                        .border_color(white().opacity(0.40))
                                                                         .flex()
                                                                         .items_center()
                                                                         .justify_center()
-                                                                        .text_color(gpui_kit::white())
+                                                                        .text_color(white())
                                                                         .child(
                                                                             Icon::new(IconName::Play)
                                                                                 .small(),
@@ -753,17 +865,17 @@ fn render_downloads_and_seasons_panel(
                                                                 .left_1p5()
                                                                 .px_1p5()
                                                                 .py_0p5()
-                                                                .rounded(px(5.))
-                                                                .bg(hsla(0.0, 0.0, 0.0, 0.78))
+                                                                .rounded(px(4.))
+                                                                .bg(hsla(222.0 / 360.0, 0.50, 0.04, 0.85))
                                                                 .text_xs()
                                                                 .font_bold()
-                                                                .text_color(gpui_kit::white())
+                                                                .text_color(white())
                                                                 .child(format!(
                                                                     "S{season_number:02} · E{ep_num:02}"
                                                                 )),
                                                         ),
                                                 )
-                                                // Episode Title & Number
+                                                // Episode Title & Subtitle
                                                 .child(
                                                     v_flex()
                                                         .gap_1()
@@ -810,7 +922,7 @@ fn render_downloads_and_seasons_panel(
                                                     )
                                                 }),
                                         ),
-                                )
+                                 )
                                 // Bottom row: Stream / Download Source Pills
                                 .child(source_links_el),
                         ),
@@ -821,7 +933,7 @@ fn render_downloads_and_seasons_panel(
                 .gap_5()
                 // Season Selector Pill Bar
                 .child(
-                    TabBar::new("details-season-tabs")
+                    TabBar::new("paramount-details-season-tabs")
                         .pill()
                         .selected_index(selected_ix)
                         .children(details.seasons.iter().enumerate().map(|(ix, season)| {
@@ -840,7 +952,7 @@ fn render_downloads_and_seasons_panel(
                                 .description(
                                     EmptyDescription::new()
                                         .child(dict.details.select_season_first),
-                                ),
+                                 ),
                         )
                         .into_any_element()
                 } else {
@@ -861,7 +973,7 @@ fn render_downloads_and_seasons_panel(
                                         )),
                                 )
                                 .child(
-                                    Tag::secondary().small().outline().child(format_count(
+                                    Tag::primary().small().outline().child(format_count(
                                         dict.details.episodes_count,
                                         total_ep_count,
                                         locale,

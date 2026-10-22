@@ -803,9 +803,9 @@ impl StreamovieApp {
         .detach();
     }
 
-    // --- Netflix + Linear Dark Vertical Sidebar ---
+    // --- Paramount+ Left Dock Navigation ---
 
-    fn render_netflix_nav_row(&self, item: NavSection, cx: &mut Context<Self>) -> AnyElement {
+    fn render_paramount_nav_row(&self, item: NavSection, cx: &mut Context<Self>) -> AnyElement {
         let locale = self.locale();
         let dict = locale.dict();
         let rtl = locale.is_rtl();
@@ -813,13 +813,13 @@ impl StreamovieApp {
         let is_active = self.active_details.is_none() && self.section == item;
         let bookmark_count = self.library.watchlist.len();
 
-        let primary = cx.theme().primary;
-        let active_bg = primary.opacity(0.16);
-        let hover_bg = hsla(0.0, 0.0, 1.0, 0.05);
-        let fg_active = cx.theme().foreground;
-        let fg_muted = cx.theme().sidebar_foreground.opacity(0.68);
+        let primary = cx.theme().primary; // #0064FF Paramount Blue
+        let active_bg = primary.opacity(0.18);
+        let hover_bg = hsla(216.0 / 360.0, 0.40, 0.85, 0.08);
+        let fg_active = white();
+        let fg_muted = hsla(215.0 / 360.0, 0.18, 0.70, 1.0);
 
-        let row_id = SharedString::from(format!("netflix-nav-{}", item.label(dict)));
+        let row_id = SharedString::from(format!("paramount-nav-{}", item.label(dict)));
 
         div()
             .id(row_id)
@@ -827,20 +827,20 @@ impl StreamovieApp {
             .w_full()
             .px_3()
             .py_2p5()
-            .rounded(px(10.))
+            .rounded(px(8.))
             .cursor_pointer()
             .when(is_active, |el| el.bg(active_bg))
             .hover(move |s| s.bg(if is_active { active_bg } else { hover_bg }))
             .on_click(cx.listener(move |this, _, _, cx| {
                 this.select_section(item, cx);
             }))
-            // Netflix-style vertical active indicator pill with luminous Paramount Blue glow
+            // Paramount+ vertical active indicator bar with luminous blue glow
             .when(is_active, |el| {
                 el.child(
                     div()
                         .absolute()
-                        .top(px(6.))
-                        .bottom(px(6.))
+                        .top(px(8.))
+                        .bottom(px(8.))
                         .when(!rtl, |bar| bar.left_0())
                         .when(rtl, |bar| bar.right_0())
                         .w(px(3.5))
@@ -848,10 +848,10 @@ impl StreamovieApp {
                         .bg(primary)
                         .shadow(vec![BoxShadow {
                             offset: point(px(0.), px(0.)),
-                            blur_radius: px(8.),
+                            blur_radius: px(10.),
                             spread_radius: px(1.),
                             inset: false,
-                            color: primary.opacity(0.75),
+                            color: primary.opacity(0.85),
                         }]),
                 )
             })
@@ -875,13 +875,13 @@ impl StreamovieApp {
                             .when(!collapsed, |row| {
                                 row.child(
                                     div()
-                                        .text_sm()
-                                        .when(is_active, |t| t.font_bold().text_color(fg_active))
-                                        .when(!is_active, |t| t.font_medium().text_color(fg_muted))
+                                        .text_xs()
+                                        .when(is_active, |t| t.font_extrabold().text_color(fg_active))
+                                        .when(!is_active, |t| t.font_semibold().text_color(fg_muted))
                                         .whitespace_nowrap()
                                         .overflow_hidden()
                                         .text_ellipsis()
-                                        .child(item.label(dict)),
+                                        .child(item.label(dict).to_uppercase()),
                                 )
                             }),
                     )
@@ -893,16 +893,17 @@ impl StreamovieApp {
                                     .px_2()
                                     .py_0p5()
                                     .rounded_full()
-                                    .bg(if is_active {
-                                        primary
-                                    } else {
-                                        primary.opacity(0.22)
-                                    })
-                                    .border_1()
-                                    .border_color(primary.opacity(0.55))
+                                    .bg(primary)
                                     .text_xs()
                                     .font_bold()
                                     .text_color(white())
+                                    .shadow(vec![BoxShadow {
+                                        offset: point(px(0.), px(2.)),
+                                        blur_radius: px(6.),
+                                        spread_radius: px(0.),
+                                        inset: false,
+                                        color: primary.opacity(0.60),
+                                    }])
                                     .child(bookmark_count.to_string()),
                             )
                         },
@@ -913,21 +914,29 @@ impl StreamovieApp {
 
     fn render_sidebar(&self, cx: &mut Context<Self>) -> AnyElement {
         let locale = self.locale();
-        let dict = locale.dict();
+        let _dict = locale.dict();
         let rtl = locale.is_rtl();
         let collapsed = self.sidebar_collapsed;
 
-        let mut primary_rows = Vec::with_capacity(NavSection::PRIMARY.len());
-        for sec in NavSection::PRIMARY {
-            primary_rows.push(self.render_netflix_nav_row(sec, cx));
+        // Paramount+ ordered navigation: Search, Home, Series, Movies
+        let primary_items = [
+            NavSection::Search,
+            NavSection::Home,
+            NavSection::Series,
+            NavSection::Movies,
+        ];
+        let mut primary_rows = Vec::with_capacity(primary_items.len());
+        for sec in primary_items {
+            primary_rows.push(self.render_paramount_nav_row(sec, cx));
         }
 
-        let mut library_rows = Vec::with_capacity(NavSection::LIBRARY.len());
-        for sec in NavSection::LIBRARY {
-            library_rows.push(self.render_netflix_nav_row(sec, cx));
+        let library_items = [NavSection::Bookmarks, NavSection::Settings];
+        let mut library_rows = Vec::with_capacity(library_items.len());
+        for sec in library_items {
+            library_rows.push(self.render_paramount_nav_row(sec, cx));
         }
 
-        let sidebar_width = if collapsed { px(72.) } else { px(244.) };
+        let sidebar_width = if collapsed { px(72.) } else { px(240.) };
 
         v_flex()
             .w(sidebar_width)
@@ -944,7 +953,7 @@ impl StreamovieApp {
                 v_flex()
                     .w_full()
                     .gap_5()
-                    // Paramount+ / Streamovie Brand Header
+                    // Paramount+ Brand Header
                     .child(
                         directional_row(h_flex(), rtl)
                             .w_full()
@@ -960,15 +969,15 @@ impl StreamovieApp {
                                     .justify_center()
                                     .size_9()
                                     .flex_shrink_0()
-                                    .rounded(px(10.))
+                                    .rounded(px(8.))
                                     .bg(cx.theme().primary)
                                     .text_color(white())
                                     .shadow(vec![BoxShadow {
                                         offset: point(px(0.), px(4.)),
-                                        blur_radius: px(12.),
+                                        blur_radius: px(14.),
                                         spread_radius: px(0.),
                                         inset: false,
-                                        color: cx.theme().primary.opacity(0.55),
+                                        color: cx.theme().primary.opacity(0.60),
                                     }])
                                     .child(Icon::new(IconName::Play)),
                             )
@@ -981,23 +990,21 @@ impl StreamovieApp {
                                         .child(
                                             div()
                                                 .text_base()
-                                                .font_bold()
+                                                .font_extrabold()
                                                 .text_color(cx.theme().foreground)
-                                                .child(dict.brand.name),
+                                                .child("PARAMOUNT+"),
                                         )
                                         .child(
                                             div()
                                                 .text_xs()
-                                                .font_medium()
-                                                .text_color(
-                                                    cx.theme().sidebar_foreground.opacity(0.55),
-                                                )
-                                                .child(dict.brand.tagline),
+                                                .font_bold()
+                                                .text_color(cx.theme().primary)
+                                                .child("STREAMOVIE"),
                                         ),
                                 )
                             }),
                     )
-                    // Primary Navigation Group
+                    // Primary Navigation Group (EXPLORE)
                     .child(
                         v_flex()
                             .w_full()
@@ -1007,16 +1014,16 @@ impl StreamovieApp {
                                     div()
                                         .px_3()
                                         .pb_1()
-                                        .text_size(px(10.5))
-                                        .font_bold()
-                                        .text_color(cx.theme().sidebar_foreground.opacity(0.40))
+                                        .text_size(px(10.))
+                                        .font_extrabold()
+                                        .text_color(cx.theme().sidebar_foreground.opacity(0.45))
                                         .when(rtl, |t| t.text_right())
-                                        .child(dict.nav.menu.to_uppercase()),
+                                        .child("EXPLORE"),
                                 )
                             })
                             .children(primary_rows),
                     )
-                    // Library & Settings Group
+                    // Library & Settings Group (MY STUFF)
                     .child(
                         v_flex()
                             .w_full()
@@ -1026,25 +1033,25 @@ impl StreamovieApp {
                                     div()
                                         .px_3()
                                         .pb_1()
-                                        .text_size(px(10.5))
-                                        .font_bold()
-                                        .text_color(cx.theme().sidebar_foreground.opacity(0.40))
+                                        .text_size(px(10.))
+                                        .font_extrabold()
+                                        .text_color(cx.theme().sidebar_foreground.opacity(0.45))
                                         .when(rtl, |t| t.text_right())
-                                        .child(dict.nav.library.to_uppercase()),
+                                        .child("MY STUFF"),
                                 )
                             })
                             .children(library_rows),
                     ),
             )
-            // Sidebar Footer: Active Locale + Accent Palette Indicator
+            // Sidebar Footer: Active Locale
             .child(
                 div()
                     .w_full()
                     .p_2p5()
-                    .rounded(cx.theme().radius)
+                    .rounded(px(8.))
                     .border_1()
                     .border_color(cx.theme().sidebar_border)
-                    .bg(hsla(220.0 / 360.0, 0.35, 0.08, 0.40))
+                    .bg(hsla(220.0 / 360.0, 0.38, 0.08, 0.60))
                     .child(
                         directional_row(h_flex(), rtl)
                             .w_full()
@@ -1078,7 +1085,7 @@ impl StreamovieApp {
                                     Tag::primary()
                                         .small()
                                         .outline()
-                                        .child(self.settings.accent_palette.label(dict)),
+                                        .child("Paramount+"),
                                 )
                             }),
                     ),
@@ -1095,7 +1102,7 @@ impl StreamovieApp {
         let active_title = if let Some(details) = self.active_details.as_ref() {
             details.media.display_title()
         } else {
-            self.section.label(dict).to_string()
+            self.section.label(dict).to_uppercase()
         };
 
         let mode_icon = match self.settings.theme_mode {
@@ -1114,7 +1121,7 @@ impl StreamovieApp {
             .justify_between()
             .items_center()
             .gap_4()
-            // Left/Start cluster: Sidebar collapse button + current section heading
+            // Left/Start cluster: Sidebar collapse toggle + section heading
             .child(
                 directional_row(h_flex(), rtl)
                     .items_center()
@@ -1137,14 +1144,14 @@ impl StreamovieApp {
                     .child(
                         div()
                             .text_lg()
-                            .font_bold()
+                            .font_extrabold()
                             .whitespace_nowrap()
                             .overflow_hidden()
                             .text_ellipsis()
                             .child(active_title),
                     ),
             )
-            // Center cluster: Quick Search Input
+            // Center cluster: Paramount+ Quick Search Input
             .child(
                 div().w(px(360.)).child(
                     Input::new(&self.search_input)
@@ -1153,7 +1160,7 @@ impl StreamovieApp {
                         .prefix(
                             Icon::new(IconName::Search)
                                 .small()
-                                .text_color(cx.theme().muted_foreground),
+                                .text_color(cx.theme().primary),
                         ),
                 ),
             )
@@ -1163,7 +1170,7 @@ impl StreamovieApp {
                     .items_center()
                     .gap_2()
                     .child(
-                        Button::new("toolbar-refresh-btn")
+                        Button::new("paramount-toolbar-refresh")
                             .small()
                             .outline()
                             .icon(IconName::RefreshCw)
@@ -1175,7 +1182,7 @@ impl StreamovieApp {
                             })),
                     )
                     .child(
-                        Button::new("toolbar-locale-btn")
+                        Button::new("paramount-toolbar-locale")
                             .small()
                             .outline()
                             .icon(IconName::Globe)
@@ -1185,7 +1192,7 @@ impl StreamovieApp {
                             })),
                     )
                     .child(
-                        Button::new("toolbar-theme-mode-btn")
+                        Button::new("paramount-toolbar-theme-mode")
                             .small()
                             .outline()
                             .icon(mode_icon)
