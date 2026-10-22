@@ -163,6 +163,7 @@ pub struct CommonDict {
 }
 
 pub struct ThemeNamesDict {
+    pub paramount: &'static str,
     pub netflix: &'static str,
     pub midnight: &'static str,
     pub aurora: &'static str,
@@ -387,6 +388,7 @@ pub static EN_DICTIONARY: Dictionary = Dictionary {
         save: "Save preferences",
         saved_notice: "Preferences saved to local disk.",
         themes: ThemeNamesDict {
+            paramount: "Paramount+",
             netflix: "Netflix",
             midnight: "Midnight",
             aurora: "Aurora",
@@ -574,6 +576,7 @@ pub static FA_DICTIONARY: Dictionary = Dictionary {
         save: "ذخیره تنظیمات",
         saved_notice: "تنظیمات در حافظه محلی ذخیره شد.",
         themes: ThemeNamesDict {
+            paramount: "پارامونت پلاس",
             netflix: "نتفلیکس",
             midnight: "نیمه‌شب",
             aurora: "شفق",

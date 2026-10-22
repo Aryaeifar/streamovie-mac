@@ -60,6 +60,7 @@ impl ThemeModePreference {
 #[serde(rename_all = "lowercase")]
 pub enum AccentPalette {
     #[default]
+    Paramount,
     Netflix,
     Midnight,
     Aurora,
@@ -70,7 +71,8 @@ pub enum AccentPalette {
 }
 
 impl AccentPalette {
-    pub const ALL: [Self; 7] = [
+    pub const ALL: [Self; 8] = [
+        Self::Paramount,
         Self::Netflix,
         Self::Midnight,
         Self::Aurora,
@@ -82,6 +84,7 @@ impl AccentPalette {
 
     pub fn code(self) -> &'static str {
         match self {
+            Self::Paramount => "paramount",
             Self::Netflix => "netflix",
             Self::Midnight => "midnight",
             Self::Aurora => "aurora",
@@ -94,18 +97,21 @@ impl AccentPalette {
 
     pub fn from_code(code: &str) -> Self {
         match code {
+            "paramount" => Self::Paramount,
+            "netflix" => Self::Netflix,
             "midnight" => Self::Midnight,
             "aurora" => Self::Aurora,
             "ocean" => Self::Ocean,
             "sunset" => Self::Sunset,
             "candy" => Self::Candy,
             "noir" => Self::Noir,
-            _ => Self::Netflix,
+            _ => Self::Paramount,
         }
     }
 
     pub fn label(self, dict: &Dictionary) -> &'static str {
         match self {
+            Self::Paramount => dict.settings.themes.paramount,
             Self::Netflix => dict.settings.themes.netflix,
             Self::Midnight => dict.settings.themes.midnight,
             Self::Aurora => dict.settings.themes.aurora,
@@ -116,9 +122,10 @@ impl AccentPalette {
         }
     }
 
-    /// Primary accent color in HSLA matching `Streamovie/src/lib/themes.ts`.
+    /// Primary accent color in HSLA matching Paramount+ / Streamovie cinema styling.
     pub fn primary_hsla(self) -> Hsla {
         match self {
+            Self::Paramount => hsla(217.0 / 360.0, 1.0, 0.50, 1.0), // #0066fe Paramount+ Blue
             Self::Netflix => hsla(357.0 / 360.0, 0.92, 0.47, 1.0),  // #e50914
             Self::Midnight => hsla(258.0 / 360.0, 0.90, 0.66, 1.0), // #8b5cf6
             Self::Aurora => hsla(160.0 / 360.0, 0.84, 0.39, 1.0),   // #10b981
@@ -133,10 +140,15 @@ impl AccentPalette {
     pub fn dark_surfaces(self) -> (Hsla, Hsla, Hsla) {
         match self {
             // (canvas_bg, card_surface, sidebar_bg)
+            Self::Paramount => (
+                hsla(222.0 / 360.0, 0.45, 0.038, 1.0), // #040811 deep cinematic navy canvas
+                hsla(220.0 / 360.0, 0.35, 0.082, 1.0), // #0d1422 deep midnight glass card
+                hsla(224.0 / 360.0, 0.42, 0.045, 1.0), // #050913 sleek sidebar
+            ),
             Self::Netflix => (
-                hsla(0.0, 0.0, 0.032, 1.0),        // #080808
-                hsla(0.0, 0.0, 0.075, 1.0),        // #131313
-                hsla(0.0, 0.0, 0.045, 1.0),        // #0b0b0b
+                hsla(222.0 / 360.0, 0.42, 0.038, 1.0),
+                hsla(220.0 / 360.0, 0.32, 0.082, 1.0),
+                hsla(224.0 / 360.0, 0.38, 0.045, 1.0),
             ),
             Self::Midnight => (
                 hsla(240.0 / 360.0, 0.29, 0.035, 1.0), // #06060b
@@ -164,9 +176,9 @@ impl AccentPalette {
                 hsla(292.0 / 360.0, 0.36, 0.048, 1.0), // #110812
             ),
             Self::Noir => (
-                hsla(0.0, 0.0, 0.039, 1.0),        // #0a0a0a
-                hsla(0.0, 0.0, 0.086, 1.0),        // #161616
-                hsla(0.0, 0.0, 0.055, 1.0),        // #0e0e0e
+                hsla(220.0 / 360.0, 0.15, 0.038, 1.0), // #0a0b0e
+                hsla(220.0 / 360.0, 0.12, 0.086, 1.0), // #14151a
+                hsla(220.0 / 360.0, 0.14, 0.052, 1.0), // #0c0e12
             ),
         }
     }
@@ -207,16 +219,16 @@ impl PersistedSettings {
 
             if theme.is_dark() {
                 theme.background = dark_bg;
-                theme.foreground = hsla(240.0 / 360.0, 0.20, 0.96, 1.0);
+                theme.foreground = hsla(215.0 / 360.0, 0.20, 0.98, 1.0);
                 theme.popover = dark_surface;
-                theme.popover_foreground = hsla(240.0 / 360.0, 0.20, 0.96, 1.0);
+                theme.popover_foreground = hsla(215.0 / 360.0, 0.20, 0.98, 1.0);
                 theme.sidebar = dark_sidebar;
-                theme.sidebar_foreground = hsla(240.0 / 360.0, 0.15, 0.90, 1.0);
-                theme.sidebar_border = hsla(0.0, 0.0, 1.0, 0.07);
-                theme.muted = hsla(240.0 / 360.0, 0.16, 0.13, 1.0);
-                theme.muted_foreground = hsla(240.0 / 360.0, 0.10, 0.64, 1.0);
-                theme.border = hsla(0.0, 0.0, 1.0, 0.08);
-                theme.input = hsla(0.0, 0.0, 1.0, 0.11);
+                theme.sidebar_foreground = hsla(215.0 / 360.0, 0.15, 0.92, 1.0);
+                theme.sidebar_border = hsla(215.0 / 360.0, 0.30, 0.85, 0.08);
+                theme.muted = hsla(220.0 / 360.0, 0.25, 0.12, 1.0);
+                theme.muted_foreground = hsla(215.0 / 360.0, 0.15, 0.68, 1.0);
+                theme.border = hsla(215.0 / 360.0, 0.30, 0.85, 0.09);
+                theme.input = hsla(215.0 / 360.0, 0.25, 0.90, 0.10);
             }
         });
     }

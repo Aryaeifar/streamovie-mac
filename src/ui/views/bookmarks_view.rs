@@ -153,6 +153,8 @@ pub fn render_bookmarks_view(
                 .w_full()
                 .flex_wrap()
                 .gap_4()
+                .pt_2()
+                .pb_2()
                 .when(rtl, |this| this.flex_row_reverse())
                 .children(cards)
                 .into_any_element()

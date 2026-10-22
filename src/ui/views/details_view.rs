@@ -7,8 +7,8 @@
 //! - Season pill selector + widescreen (`168x96`) episode guide cards with direct stream/download actions
 
 use gpui_kit::{
-    AnyElement, Context, IntoElement, ParentElement as _, Styled as _, div, hsla,
-    linear_color_stop, linear_gradient, prelude::FluentBuilder as _, px, relative,
+    AnyElement, BoxShadow, Context, IntoElement, ParentElement as _, Styled as _, div, hsla,
+    linear_color_stop, linear_gradient, point, prelude::FluentBuilder as _, px, relative, white,
 };
 use gpui_kit::component::{
     ActiveTheme as _, Icon, IconName, Selectable as _, Sizable as _, StyledExt as _, WindowExt as _,
@@ -93,16 +93,16 @@ pub fn render_details_view(
     let gold_fg = hsla(46.0 / 360.0, 0.98, 0.65, 1.0);
     let gold_border = hsla(45.0 / 360.0, 0.95, 0.52, 0.50);
 
-    let stage_bg = hsla(240.0 / 360.0, 0.18, 0.05, 1.0);
+    let stage_bg = hsla(222.0 / 360.0, 0.65, 0.04, 1.0);
     let scrim_bottom = linear_gradient(
         0.0,
-        linear_color_stop(hsla(240.0 / 360.0, 0.20, 0.04, 0.98), 0.0),
-        linear_color_stop(hsla(240.0 / 360.0, 0.16, 0.05, 0.50), 1.0),
+        linear_color_stop(hsla(222.0 / 360.0, 0.65, 0.035, 1.0), 0.0),
+        linear_color_stop(hsla(222.0 / 360.0, 0.40, 0.05, 0.35), 1.0),
     );
     let scrim_side = linear_gradient(
         if rtl { 270.0 } else { 90.0 },
-        linear_color_stop(hsla(240.0 / 360.0, 0.20, 0.04, 0.94), 0.0),
-        linear_color_stop(hsla(240.0 / 360.0, 0.16, 0.05, 0.35), 1.0),
+        linear_color_stop(hsla(222.0 / 360.0, 0.65, 0.035, 0.96), 0.0),
+        linear_color_stop(hsla(222.0 / 360.0, 0.40, 0.05, 0.20), 1.0),
     );
 
     let omdb_section = render_omdb_enrichment_card(details, app, cx);
@@ -129,15 +129,15 @@ pub fn render_details_view(
                     })),
             ),
         )
-        // Infuse 8 / Apple TV Full-Bleed Backdrop Stage + Floating Poster
+        // Paramount+ Cinematic Full-Bleed Backdrop Stage + Floating Poster
         .child(
             div()
                 .relative()
                 .w_full()
-                .min_h(px(420.))
+                .min_h(px(460.))
                 .rounded(cx.theme().radius_lg)
                 .border_1()
-                .border_color(hsla(0.0, 0.0, 1.0, 0.12))
+                .border_color(hsla(215.0 / 360.0, 0.30, 0.85, 0.08))
                 .bg(stage_bg)
                 .shadow_xl()
                 .overflow_hidden()
@@ -160,11 +160,26 @@ pub fn render_details_view(
                                 .w(px(230.))
                                 .h(px(345.))
                                 .flex_shrink_0()
-                                .rounded(cx.theme().radius_lg)
+                                .rounded(px(14.))
                                 .border_1()
-                                .border_color(hsla(0.0, 0.0, 1.0, 0.18))
+                                .border_color(hsla(215.0 / 360.0, 0.40, 0.90, 0.20))
                                 .bg(cx.theme().muted)
-                                .shadow_xl()
+                                .shadow(vec![
+                                    BoxShadow {
+                                        offset: point(px(0.), px(12.)),
+                                        blur_radius: px(30.),
+                                        spread_radius: px(0.),
+                                        inset: false,
+                                        color: hsla(217.0 / 360.0, 0.90, 0.50, 0.35),
+                                    },
+                                    BoxShadow {
+                                        offset: point(px(0.), px(8.)),
+                                        blur_radius: px(16.),
+                                        spread_radius: px(0.),
+                                        inset: false,
+                                        color: hsla(0., 0., 0., 0.90),
+                                    },
+                                ])
                                 .overflow_hidden()
                                 .child(poster_el),
                         )
@@ -225,10 +240,10 @@ pub fn render_details_view(
                                 // Title
                                 .child(
                                     div()
-                                        .text_3xl()
-                                        .font_bold()
+                                        .text_size(px(34.))
+                                        .font_extrabold()
                                         .line_height(relative(1.12))
-                                        .text_color(gpui_kit::white())
+                                        .text_color(white())
                                         .when(title_rtl, |this| this.text_right())
                                         .child(title.clone()),
                                 )
@@ -662,10 +677,10 @@ fn render_downloads_and_seasons_panel(
                     div()
                         .w_full()
                         .p_4()
-                        .rounded(cx.theme().radius_lg)
+                        .rounded(px(14.))
                         .border_1()
                         .border_color(cx.theme().border)
-                        .bg(cx.theme().background)
+                        .bg(cx.theme().popover)
                         .child(
                             v_flex()
                                 .w_full()
@@ -682,16 +697,16 @@ fn render_downloads_and_seasons_panel(
                                                 .items_center()
                                                 .gap_3p5()
                                                 .min_w_0()
-                                                // Widescreen 168x96 Episode Thumbnail (Infuse / Apple TV style)
+                                                // Widescreen 168x96 Episode Thumbnail (Paramount+ style)
                                                 .child(
                                                     div()
                                                         .relative()
                                                         .w(px(168.))
                                                         .h(px(96.))
                                                         .flex_shrink_0()
-                                                        .rounded(cx.theme().radius)
+                                                        .rounded(px(10.))
                                                         .border_1()
-                                                        .border_color(hsla(0.0, 0.0, 1.0, 0.12))
+                                                        .border_color(hsla(215.0 / 360.0, 0.30, 0.85, 0.14))
                                                         .overflow_hidden()
                                                         .child(render_remote_image(
                                                             app,

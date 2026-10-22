@@ -9,9 +9,9 @@
 //! glowing brand-accent hover states.
 
 use gpui_kit::{
-    AnyElement, Context, InteractiveElement as _, IntoElement, ParentElement as _, SharedString,
-    StatefulInteractiveElement as _, Styled as _, black, div, hsla, linear_color_stop,
-    linear_gradient, prelude::FluentBuilder as _, px, relative, white,
+    AnyElement, BoxShadow, Context, InteractiveElement as _, IntoElement, ParentElement as _,
+    SharedString, StatefulInteractiveElement as _, Styled as _, black, div, hsla,
+    linear_color_stop, linear_gradient, point, prelude::FluentBuilder as _, px, relative, white,
 };
 use gpui_kit::component::{
     ActiveTheme as _, Icon, IconName, Selectable as _, Sizable as _, StyledExt as _, WindowExt as _,
@@ -28,10 +28,10 @@ use crate::{
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum PosterCardStyle {
-    /// Standard 2:3 vertical movie/series poster card (`200x300`, Infuse / Apple TV style).
+    /// Standard 2:3 vertical movie/series poster card (`200x300`, Paramount+ / cinema style).
     #[default]
     Poster,
-    /// Widescreen 16:9 landscape card (`296x168`, Netflix / Apple TV featured row style).
+    /// Widescreen 16:9 landscape card (`296x168`, Paramount+ featured row style).
     Widescreen,
 }
 
@@ -89,7 +89,7 @@ pub fn render_poster_card_with_style(
         PosterCardStyle::Poster => (px(196.), px(294.)),
         PosterCardStyle::Widescreen => (px(292.), px(166.)),
     };
-    let card_radius = px(18.);
+    let card_radius = px(14.);
 
     let card_id = SharedString::from(format!(
         "media-card-{id_scope}-{}-{media_id}",
@@ -105,16 +105,41 @@ pub fn render_poster_card_with_style(
 
     let primary_accent = cx.theme().primary;
     let subtle_border = if cx.theme().is_dark() {
-        hsla(0.0, 0.0, 1.0, 0.10)
+        hsla(215.0 / 360.0, 0.30, 0.85, 0.12)
     } else {
         cx.theme().border
     };
 
-    let gold_pill_bg = hsla(0.0, 0.0, 0.04, 0.78);
-    let gold_pill_border = hsla(45.0 / 360.0, 0.95, 0.55, 0.42);
+    let default_shadow = vec![BoxShadow {
+        offset: point(px(0.), px(4.)),
+        blur_radius: px(14.),
+        spread_radius: px(0.),
+        inset: false,
+        color: hsla(222.0 / 360.0, 0.45, 0.02, 0.65),
+    }];
+
+    let hover_shadow = vec![
+        BoxShadow {
+            offset: point(px(0.), px(12.)),
+            blur_radius: px(28.),
+            spread_radius: px(1.5),
+            inset: false,
+            color: hsla(217.0 / 360.0, 0.95, 0.50, 0.40),
+        },
+        BoxShadow {
+            offset: point(px(0.), px(6.)),
+            blur_radius: px(14.),
+            spread_radius: px(0.),
+            inset: false,
+            color: hsla(0.0, 0.0, 0.0, 0.85),
+        },
+    ];
+
+    let gold_pill_bg = hsla(0.0, 0.0, 0.04, 0.82);
+    let gold_pill_border = hsla(45.0 / 360.0, 0.95, 0.55, 0.45);
     let gold_text = hsla(45.0 / 360.0, 0.96, 0.64, 1.0);
-    let glass_pill_bg = hsla(0.0, 0.0, 0.05, 0.72);
-    let glass_pill_border = hsla(0.0, 0.0, 1.0, 0.14);
+    let glass_pill_bg = hsla(220.0 / 360.0, 0.35, 0.06, 0.80);
+    let glass_pill_border = hsla(0.0, 0.0, 1.0, 0.16);
 
     let fallback_type_label = if category == MediaCategory::Series {
         dict.home.series
@@ -140,13 +165,15 @@ pub fn render_poster_card_with_style(
         .id(card_id)
         .w(card_w)
         .flex_shrink_0()
+        .pt(px(6.))
+        .pb_1()
         .gap_2p5()
         .cursor_pointer()
         .group("poster-card")
         .on_click(cx.listener(move |this, _, _, cx| {
             this.open_details(media_for_open.clone(), category, cx);
         }))
-        // Artwork Frame (Infuse / Apple TV rounded poster with inner hairline border & hover glow)
+        // Artwork Frame (Paramount+ rounded poster with gentle scale lift + soft glow shadow)
         .child(
             div()
                 .relative()
@@ -157,9 +184,16 @@ pub fn render_poster_card_with_style(
                 .bg(cx.theme().popover)
                 .border_1()
                 .border_color(subtle_border)
-                .shadow_md()
+                .shadow(default_shadow)
                 .overflow_hidden()
-                .hover(move |style| style.border_color(primary_accent).shadow_lg())
+                // Smooth hover animation: gentle scale lift + soft Paramount Blue shadow + crisp border highlight
+                .group_hover("poster-card", move |style| {
+                    style
+                        .mt(-px(6.))
+                        .mb(px(6.))
+                        .border_color(primary_accent.opacity(0.95))
+                        .shadow(hover_shadow.clone())
+                })
                 // 1. Remote Poster / Backdrop Image
                 .child(artwork)
                 // 2. Bottom Cinematic Gradient Vignette
@@ -170,8 +204,8 @@ pub fn render_poster_card_with_style(
                         .rounded(card_radius)
                         .bg(linear_gradient(
                             0.,
-                            linear_color_stop(black().opacity(0.90), 0.0),
-                            linear_color_stop(black().opacity(0.0), 0.58),
+                            linear_color_stop(black().opacity(0.92), 0.0),
+                            linear_color_stop(black().opacity(0.0), 0.62),
                         )),
                 )
                 // 3. Top Floating Bar: Gold IMDb Rating Pill + Bookmark Action
@@ -190,7 +224,7 @@ pub fn render_poster_card_with_style(
                                 .items_center()
                                 .px_2()
                                 .py_0p5()
-                                .rounded(px(8.))
+                                .rounded(px(7.))
                                 .bg(gold_pill_bg)
                                 .border_1()
                                 .border_color(gold_pill_border)
@@ -204,13 +238,13 @@ pub fn render_poster_card_with_style(
                             div()
                                 .px_2()
                                 .py_0p5()
-                                .rounded(px(8.))
+                                .rounded(px(7.))
                                 .bg(glass_pill_bg)
                                 .border_1()
                                 .border_color(glass_pill_border)
-                                .text_color(white().opacity(0.88))
+                                .text_color(white().opacity(0.90))
                                 .text_xs()
-                                .font_medium()
+                                .font_semibold()
                                 .child(fallback_type_label)
                                 .into_any_element()
                         })
@@ -253,8 +287,39 @@ pub fn render_poster_card_with_style(
                                 })),
                         ),
                 )
-                // 4. Bottom Inside Overlay: For Widescreen cards, show embedded title + year;
-                //    for Tall Poster cards, show subtle genre + category chip
+                // 4. Center Play Button overlay on hover
+                .child(
+                    div()
+                        .absolute()
+                        .inset_0()
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .opacity(0.0)
+                        .group_hover("poster-card", |s| s.opacity(1.0))
+                        .child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .size_11()
+                                .rounded_full()
+                                .bg(primary_accent.opacity(0.92))
+                                .text_color(white())
+                                .border_2()
+                                .border_color(white().opacity(0.40))
+                                .shadow(vec![BoxShadow {
+                                    offset: point(px(0.), px(4.)),
+                                    blur_radius: px(16.),
+                                    spread_radius: px(0.),
+                                    inset: false,
+                                    color: hsla(0.0, 0.0, 0.0, 0.8),
+                                }])
+                                .child(Icon::new(IconName::Play).small()),
+                        ),
+                )
+                // 5. Bottom Inside Overlay: For Widescreen cards, embedded title + metadata;
+                //    for Tall Poster cards, subtle genre chip
                 .child(match card_style {
                     PosterCardStyle::Widescreen => v_flex()
                         .absolute()
@@ -280,7 +345,7 @@ pub fn render_poster_card_with_style(
                             directional_row(h_flex(), rtl)
                                 .gap_2()
                                 .text_xs()
-                                .text_color(white().opacity(0.75))
+                                .text_color(white().opacity(0.78))
                                 .when_some(year.clone(), |row, yr| row.child(yr))
                                 .when_some(first_genre.clone(), |row, g| {
                                     row.child("·").child(g)
@@ -305,14 +370,14 @@ pub fn render_poster_card_with_style(
                                     .border_color(glass_pill_border)
                                     .text_size(px(10.))
                                     .font_medium()
-                                    .text_color(white().opacity(0.90))
+                                    .text_color(white().opacity(0.92))
                                     .child(genre),
                             )
                         })
                         .into_any_element(),
                 }),
         )
-        // Below-Poster Caption (Infuse / Apple TV style — only for Tall Poster cards)
+        // Below-Poster Caption (Paramount+ style — for Tall Poster cards)
         .when(card_style == PosterCardStyle::Poster, |card| {
             card.child(
                 v_flex()
@@ -324,9 +389,10 @@ pub fn render_poster_card_with_style(
                         div()
                             .w_full()
                             .text_sm()
-                            .font_semibold()
-                            .line_height(relative(1.3))
+                            .font_bold()
+                            .line_height(relative(1.28))
                             .text_color(cx.theme().foreground)
+                            .group_hover("poster-card", move |s| s.text_color(primary_accent))
                             .whitespace_nowrap()
                             .overflow_hidden()
                             .text_ellipsis()
@@ -339,6 +405,7 @@ pub fn render_poster_card_with_style(
                             .justify_between()
                             .items_center()
                             .text_xs()
+                            .font_medium()
                             .text_color(cx.theme().muted_foreground)
                             .child(year.unwrap_or_else(|| "—".to_string()))
                             .child(fallback_type_label),

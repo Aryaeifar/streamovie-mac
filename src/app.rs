@@ -6,9 +6,10 @@
 use std::sync::Arc;
 
 use gpui_kit::{
-    AnyElement, App, AppContext as _, Context, Entity, Image, InteractiveElement as _, IntoElement,
-    ParentElement as _, Render, ScrollHandle, SharedString, StatefulInteractiveElement as _,
-    Styled as _, Subscription, Window, div, hsla, point, prelude::FluentBuilder as _, px,
+    AnyElement, App, AppContext as _, BoxShadow, Context, Entity, Image, InteractiveElement as _,
+    IntoElement, ParentElement as _, Render, ScrollHandle, SharedString,
+    StatefulInteractiveElement as _, Styled as _, Subscription, Window, div, hsla, point,
+    prelude::FluentBuilder as _, px, white,
 };
 use gpui_kit::component::{
     ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt as _, TitleBar,
@@ -813,10 +814,10 @@ impl StreamovieApp {
         let bookmark_count = self.library.watchlist.len();
 
         let primary = cx.theme().primary;
-        let active_bg = primary.opacity(0.14);
-        let hover_bg = cx.theme().sidebar_accent;
-        let fg_active = cx.theme().sidebar_foreground;
-        let fg_muted = cx.theme().sidebar_foreground.opacity(0.66);
+        let active_bg = primary.opacity(0.16);
+        let hover_bg = hsla(0.0, 0.0, 1.0, 0.05);
+        let fg_active = cx.theme().foreground;
+        let fg_muted = cx.theme().sidebar_foreground.opacity(0.68);
 
         let row_id = SharedString::from(format!("netflix-nav-{}", item.label(dict)));
 
@@ -826,25 +827,32 @@ impl StreamovieApp {
             .w_full()
             .px_3()
             .py_2p5()
-            .rounded(cx.theme().radius)
+            .rounded(px(10.))
             .cursor_pointer()
             .when(is_active, |el| el.bg(active_bg))
             .hover(move |s| s.bg(if is_active { active_bg } else { hover_bg }))
             .on_click(cx.listener(move |this, _, _, cx| {
                 this.select_section(item, cx);
             }))
-            // Netflix-style vertical active indicator pill on the leading edge
+            // Netflix-style vertical active indicator pill with luminous Paramount Blue glow
             .when(is_active, |el| {
                 el.child(
                     div()
                         .absolute()
-                        .top_2()
-                        .bottom_2()
+                        .top(px(6.))
+                        .bottom(px(6.))
                         .when(!rtl, |bar| bar.left_0())
                         .when(rtl, |bar| bar.right_0())
                         .w(px(3.5))
                         .rounded_full()
-                        .bg(primary),
+                        .bg(primary)
+                        .shadow(vec![BoxShadow {
+                            offset: point(px(0.), px(0.)),
+                            blur_radius: px(8.),
+                            spread_radius: px(1.),
+                            inset: false,
+                            color: primary.opacity(0.75),
+                        }]),
                 )
             })
             .child(
@@ -888,15 +896,13 @@ impl StreamovieApp {
                                     .bg(if is_active {
                                         primary
                                     } else {
-                                        cx.theme().sidebar_accent
+                                        primary.opacity(0.22)
                                     })
+                                    .border_1()
+                                    .border_color(primary.opacity(0.55))
                                     .text_xs()
                                     .font_bold()
-                                    .text_color(if is_active {
-                                        cx.theme().primary_foreground
-                                    } else {
-                                        fg_active
-                                    })
+                                    .text_color(white())
                                     .child(bookmark_count.to_string()),
                             )
                         },
@@ -938,7 +944,7 @@ impl StreamovieApp {
                 v_flex()
                     .w_full()
                     .gap_5()
-                    // Netflix / Infuse Brand Header
+                    // Paramount+ / Streamovie Brand Header
                     .child(
                         directional_row(h_flex(), rtl)
                             .w_full()
@@ -954,10 +960,16 @@ impl StreamovieApp {
                                     .justify_center()
                                     .size_9()
                                     .flex_shrink_0()
-                                    .rounded(cx.theme().radius)
+                                    .rounded(px(10.))
                                     .bg(cx.theme().primary)
-                                    .text_color(cx.theme().primary_foreground)
-                                    .shadow_md()
+                                    .text_color(white())
+                                    .shadow(vec![BoxShadow {
+                                        offset: point(px(0.), px(4.)),
+                                        blur_radius: px(12.),
+                                        spread_radius: px(0.),
+                                        inset: false,
+                                        color: cx.theme().primary.opacity(0.55),
+                                    }])
                                     .child(Icon::new(IconName::Play)),
                             )
                             .when(!collapsed, |row| {
@@ -970,12 +982,13 @@ impl StreamovieApp {
                                             div()
                                                 .text_base()
                                                 .font_bold()
-                                                .text_color(cx.theme().sidebar_foreground)
+                                                .text_color(cx.theme().foreground)
                                                 .child(dict.brand.name),
                                         )
                                         .child(
                                             div()
                                                 .text_xs()
+                                                .font_medium()
                                                 .text_color(
                                                     cx.theme().sidebar_foreground.opacity(0.55),
                                                 )
@@ -994,9 +1007,9 @@ impl StreamovieApp {
                                     div()
                                         .px_3()
                                         .pb_1()
-                                        .text_xs()
+                                        .text_size(px(10.5))
                                         .font_bold()
-                                        .text_color(cx.theme().sidebar_foreground.opacity(0.42))
+                                        .text_color(cx.theme().sidebar_foreground.opacity(0.40))
                                         .when(rtl, |t| t.text_right())
                                         .child(dict.nav.menu.to_uppercase()),
                                 )
@@ -1013,9 +1026,9 @@ impl StreamovieApp {
                                     div()
                                         .px_3()
                                         .pb_1()
-                                        .text_xs()
+                                        .text_size(px(10.5))
                                         .font_bold()
-                                        .text_color(cx.theme().sidebar_foreground.opacity(0.42))
+                                        .text_color(cx.theme().sidebar_foreground.opacity(0.40))
                                         .when(rtl, |t| t.text_right())
                                         .child(dict.nav.library.to_uppercase()),
                                 )
@@ -1031,7 +1044,7 @@ impl StreamovieApp {
                     .rounded(cx.theme().radius)
                     .border_1()
                     .border_color(cx.theme().sidebar_border)
-                    .bg(hsla(0.0, 0.0, 1.0, 0.02))
+                    .bg(hsla(220.0 / 360.0, 0.35, 0.08, 0.40))
                     .child(
                         directional_row(h_flex(), rtl)
                             .w_full()
@@ -1238,7 +1251,7 @@ impl Render for StreamovieApp {
                                             div()
                                                 .text_xs()
                                                 .text_color(cx.theme().muted_foreground)
-                                                .child("· macOS Cinema Edition"),
+                                                .child("· Paramount+ Cinema Edition"),
                                         ),
                                 )
                                 .child(

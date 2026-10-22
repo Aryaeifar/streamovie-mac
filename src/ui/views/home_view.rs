@@ -42,8 +42,8 @@ pub fn render_home_view(
     if home.loading && home.latest_movies.is_empty() && home.latest_series.is_empty() {
         return v_flex()
             .w_full()
-            .gap_8()
-            .child(Skeleton::new().w_full().h(px(450.)).rounded(radius_lg))
+            .gap_10()
+            .child(Skeleton::new().w_full().h(px(500.)).rounded(radius_lg))
             .child(render_skeleton_row(radius_lg, PosterCardStyle::Poster))
             .child(render_skeleton_row(radius_lg, PosterCardStyle::Widescreen))
             .into_any_element();
@@ -140,8 +140,8 @@ pub fn render_home_view(
 
     v_flex()
         .w_full()
-        .gap_8()
-        .pb_10()
+        .gap_10()
+        .pb_12()
         .child(hero)
         .child(latest_movies_sec)
         .child(latest_series_sec)
@@ -192,8 +192,8 @@ fn render_carousel_section(
 
     v_flex()
         .w_full()
-        .gap_3p5()
-        // Section Header: Accent bar + Title + Count Pill + Scroll Controls + See More
+        .gap_4()
+        // Section Header: Paramount+ Accent bar + Title + Count Pill + Scroll Controls + See More
         .child(
             directional_row(h_flex(), rtl)
                 .w_full()
@@ -206,8 +206,8 @@ fn render_carousel_section(
                         .gap_3()
                         .child(
                             div()
-                                .w(px(4.))
-                                .h(px(22.))
+                                .w(px(3.5))
+                                .h(px(24.))
                                 .rounded_full()
                                 .bg(cx.theme().primary),
                         )
@@ -221,7 +221,7 @@ fn render_carousel_section(
                                         .gap_2p5()
                                         .child(
                                             div()
-                                                .text_lg()
+                                                .text_xl()
                                                 .font_bold()
                                                 .text_color(cx.theme().foreground)
                                                 .child(title.to_string()),
@@ -284,7 +284,7 @@ fn render_carousel_section(
                         ),
                 ),
         )
-        // Horizontal Carousel Track
+        // Horizontal Carousel Track (with vertical padding to accommodate hover elevation without clipping)
         .child(if cards.is_empty() {
             div()
                 .w_full()
@@ -306,7 +306,8 @@ fn render_carousel_section(
                 .child(
                     h_flex()
                         .gap_4()
-                        .py_1()
+                        .pt_2()
+                        .pb_3()
                         .when(rtl, |this| this.flex_row_reverse())
                         .children(cards),
                 )
