@@ -76,8 +76,51 @@ jobs:
             "Streamovie-mac.dmg"
 
       - name: Upload build
+        id: upload
+        continue-on-error: true
         uses: actions/upload-artifact@v4
+        env:
+          ACTIONS_ARTIFACT_UPLOAD_CONCURRENCY: 2
         with:
           name: Streamovie-mac
           path: Streamovie-mac.dmg
           if-no-files-found: error
+          compression-level: 0
+          overwrite: true
+          retention-days: 14
+
+      - name: Wait before upload retry
+        if: steps.upload.outcome == 'failure'
+        run: sleep 45
+
+      - name: Upload build again
+        id: upload-retry
+        if: steps.upload.outcome == 'failure'
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        env:
+          ACTIONS_ARTIFACT_UPLOAD_CONCURRENCY: 2
+        with:
+          name: Streamovie-mac
+          path: Streamovie-mac.dmg
+          if-no-files-found: error
+          compression-level: 0
+          overwrite: true
+          retention-days: 14
+
+      - name: Wait before final upload
+        if: steps.upload.outcome == 'failure' && steps.upload-retry.outcome == 'failure'
+        run: sleep 90
+
+      - name: Upload build final attempt
+        if: steps.upload.outcome == 'failure' && steps.upload-retry.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        env:
+          ACTIONS_ARTIFACT_UPLOAD_CONCURRENCY: 2
+        with:
+          name: Streamovie-mac
+          path: Streamovie-mac.dmg
+          if-no-files-found: error
+          compression-level: 0
+          overwrite: true
+          retention-days: 14
