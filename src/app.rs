@@ -31,8 +31,8 @@ use crate::{
         NavSection, SearchState,
     },
     storage::{
-        AccentPalette, BookmarkStorage, PersistedSettings, SettingsStorage,
-        app_data_dir,
+        AccentPalette, BookmarkStorage, ContinueStorage, ContinueWatchingData, PersistedSettings,
+        SettingsStorage, app_data_dir,
     },
     ui::{
         components::render_player_view,
@@ -58,6 +58,8 @@ struct DetailsDrag {
     start_offset_x: Pixels,
 }
 
+const HOME_RAIL_COUNT: usize = 8;
+
 fn clamp_rail_offset(offset: Pixels, max_offset: Pixels) -> Pixels {
     let mut next = offset;
     if next > px(0.) {
@@ -76,16 +78,18 @@ pub struct StreamovieApp {
     streamovie_api: StreamovieClient,
     omdb_api: OmdbClient,
     bookmark_storage: BookmarkStorage,
+    continue_storage: ContinueStorage,
     settings_storage: SettingsStorage,
     image_cache: ImageCache,
 
     settings: PersistedSettings,
     library: LibraryStoreData,
+    continue_watching: ContinueWatchingData,
 
     section: NavSection,
 
     home: HomeFeedState,
-    home_row_scroll_handles: [ScrollHandle; 4],
+    home_row_scroll_handles: [ScrollHandle; HOME_RAIL_COUNT],
     season_scroll: ScrollHandle,
     episode_scroll: ScrollHandle,
     main_scroll: ScrollHandle,
@@ -119,11 +123,13 @@ impl StreamovieApp {
         let streamovie_api = StreamovieClient::new(config.clone());
         let omdb_api = OmdbClient::new(config.clone());
         let bookmark_storage = BookmarkStorage::new();
+        let continue_storage = ContinueStorage::new();
         let settings_storage = SettingsStorage::new();
         let image_cache = ImageCache::new();
 
         let settings = settings_storage.load();
         let library = bookmark_storage.load();
+        let continue_watching = continue_storage.load();
 
         // Apply persisted theme (Dark default, Light, or System) + brand accent palette
         settings.apply_to_uni_kit(Some(window), cx);
@@ -175,21 +181,18 @@ impl StreamovieApp {
             streamovie_api,
             omdb_api,
             bookmark_storage,
+            continue_storage,
             settings_storage,
             image_cache,
             settings,
             library,
+            continue_watching,
             section: NavSection::Home,
             home: HomeFeedState {
                 loading: true,
                 ..Default::default()
             },
-            home_row_scroll_handles: [
-                ScrollHandle::new(),
-                ScrollHandle::new(),
-                ScrollHandle::new(),
-                ScrollHandle::new(),
-            ],
+            home_row_scroll_handles: std::array::from_fn(|_| ScrollHandle::new()),
             season_scroll: ScrollHandle::new(),
             episode_scroll: ScrollHandle::new(),
             main_scroll: ScrollHandle::new(),
@@ -489,6 +492,10 @@ impl StreamovieApp {
         self.library.ordered_bookmarks()
     }
 
+    pub fn continue_items(&self) -> &[crate::storage::ContinueEntry] {
+        &self.continue_watching.items
+    }
+
     pub fn storage_dir_display(&self) -> String {
         app_data_dir().display().to_string()
     }
@@ -508,13 +515,73 @@ impl StreamovieApp {
         sort: BrowseSort,
         cx: &mut Context<Self>,
     ) {
-        self.section = section;
         self.active_details = None;
         match section {
-            NavSection::Movies => self.set_catalog_sort(MediaCategory::Movie, sort, cx),
-            NavSection::Series => self.set_catalog_sort(MediaCategory::Series, sort, cx),
-            _ => cx.notify(),
+            NavSection::Movies => {
+                self.section = NavSection::Movies;
+                self.apply_catalog_filters(MediaCategory::Movie, sort, 0, false, cx);
+            }
+            NavSection::Series => {
+                self.section = NavSection::Series;
+                self.apply_catalog_filters(MediaCategory::Series, sort, 0, false, cx);
+            }
+            other => self.select_section(other, cx),
         }
+    }
+
+    /// Opens the movies or series list on the official numbered Top 250 chart.
+    pub fn open_chart(&mut self, category: MediaCategory, cx: &mut Context<Self>) {
+        self.active_details = None;
+        self.section = match category {
+            MediaCategory::Movie => NavSection::Movies,
+            MediaCategory::Series => NavSection::Series,
+        };
+        self.apply_catalog_filters(category, BrowseSort::Imdb, 0, true, cx);
+    }
+
+    /// Opens the movies list filtered to one genre.
+    pub fn open_genre(&mut self, genre_id: u64, cx: &mut Context<Self>) {
+        self.active_details = None;
+        self.section = NavSection::Movies;
+        self.apply_catalog_filters(MediaCategory::Movie, BrowseSort::Created, genre_id, false, cx);
+    }
+
+    /// Highest-rated list for the page the user is already on.
+    pub fn open_popular_list(&mut self, cx: &mut Context<Self>) {
+        self.active_details = None;
+        let category = match self.section {
+            NavSection::Series => MediaCategory::Series,
+            _ => {
+                self.section = NavSection::Movies;
+                MediaCategory::Movie
+            }
+        };
+        self.apply_catalog_filters(category, BrowseSort::Imdb, 0, false, cx);
+    }
+
+    fn apply_catalog_filters(
+        &mut self,
+        category: MediaCategory,
+        sort: BrowseSort,
+        genre_id: u64,
+        chart: bool,
+        cx: &mut Context<Self>,
+    ) {
+        let state = self.catalog_state_mut(category);
+        if state.sort == sort
+            && state.genre_id == genre_id
+            && state.chart == chart
+            && !state.items.is_empty()
+            && state.error.is_none()
+        {
+            cx.notify();
+            return;
+        }
+        state.sort = sort;
+        state.genre_id = genre_id;
+        state.chart = chart;
+        state.page = 0;
+        self.reload_catalog(category, cx);
     }
 
     pub fn set_bookmarks_filter_tab(&mut self, tab: MediaFilterTab, cx: &mut Context<Self>) {
@@ -726,13 +793,8 @@ impl StreamovieApp {
         sort: BrowseSort,
         cx: &mut Context<Self>,
     ) {
-        let state = self.catalog_state_mut(category);
-        if state.sort == sort && !state.items.is_empty() {
-            return;
-        }
-        state.sort = sort;
-        state.page = 0;
-        self.reload_catalog(category, cx);
+        let genre_id = self.catalog_state(category).genre_id;
+        self.apply_catalog_filters(category, sort, genre_id, false, cx);
     }
 
     pub fn set_catalog_genre(
@@ -741,31 +803,24 @@ impl StreamovieApp {
         genre_id: u64,
         cx: &mut Context<Self>,
     ) {
-        let state = self.catalog_state_mut(category);
-        if state.genre_id == genre_id && !state.items.is_empty() {
-            return;
-        }
-        state.genre_id = genre_id;
-        state.page = 0;
-        self.reload_catalog(category, cx);
+        let sort = self.catalog_state(category).sort;
+        self.apply_catalog_filters(category, sort, genre_id, false, cx);
     }
 
     #[allow(dead_code)]
     pub fn reset_catalog_filters(&mut self, category: MediaCategory, cx: &mut Context<Self>) {
-        let state = self.catalog_state_mut(category);
-        state.sort = BrowseSort::Created;
-        state.genre_id = 0;
-        state.page = 0;
-        self.reload_catalog(category, cx);
+        self.apply_catalog_filters(category, BrowseSort::Created, 0, false, cx);
     }
 
     pub fn reload_catalog(&mut self, category: MediaCategory, cx: &mut Context<Self>) {
-        let (genre_id, sort) = {
+        let (genre_id, sort, chart, generation) = {
             let state = self.catalog_state_mut(category);
             state.loading = true;
+            state.loading_more = false;
             state.error = None;
             state.page = 0;
-            (state.genre_id, state.sort)
+            state.fetch_generation = state.fetch_generation.wrapping_add(1);
+            (state.genre_id, state.sort, state.chart, state.fetch_generation)
         };
         cx.notify();
 
@@ -774,19 +829,27 @@ impl StreamovieApp {
             let res = cx
                 .background_executor()
                 .spawn(async move {
-                    match category {
-                        MediaCategory::Movie => client.fetch_movies(0, genre_id, sort),
-                        MediaCategory::Series => client.fetch_series(0, genre_id, sort),
+                    if chart {
+                        client.fetch_imdb_chart(category)
+                    } else {
+                        match category {
+                            MediaCategory::Movie => client.fetch_movies(0, genre_id, sort),
+                            MediaCategory::Series => client.fetch_series(0, genre_id, sort),
+                        }
                     }
                 })
                 .await;
 
             let _ = this.update(cx, |this, cx| {
                 let state = this.catalog_state_mut(category);
+                if state.fetch_generation != generation {
+                    return;
+                }
                 state.loading = false;
+                state.loading_more = false;
                 match res {
                     Ok(items) => {
-                        state.has_more = !items.is_empty();
+                        state.has_more = !chart && !items.is_empty();
                         state.items = items;
                         state.error = None;
                     }
@@ -801,14 +864,20 @@ impl StreamovieApp {
     }
 
     pub fn load_more_catalog(&mut self, category: MediaCategory, cx: &mut Context<Self>) {
-        let (next_page, genre_id, sort) = {
+        let (next_page, genre_id, sort, generation) = {
             let state = self.catalog_state_mut(category);
-            if state.loading || state.loading_more || !state.has_more {
+            if state.chart || state.loading || state.loading_more || !state.has_more {
                 return;
             }
             state.loading_more = true;
             state.error = None;
-            (state.page + 1, state.genre_id, state.sort)
+            state.fetch_generation = state.fetch_generation.wrapping_add(1);
+            (
+                state.page + 1,
+                state.genre_id,
+                state.sort,
+                state.fetch_generation,
+            )
         };
         cx.notify();
 
@@ -826,6 +895,10 @@ impl StreamovieApp {
 
             let _ = this.update(cx, |this, cx| {
                 let state = this.catalog_state_mut(category);
+                if state.fetch_generation != generation {
+                    return;
+                }
+                state.loading = false;
                 state.loading_more = false;
                 match res {
                     Ok(more) => {
@@ -936,6 +1009,7 @@ impl StreamovieApp {
             self.rail_drag_moved = false;
             return;
         }
+        self.remember_continue(media.clone(), category, 0.16);
         let media_id = media.id;
         let lookup_title = media.english_lookup_title();
         let year = media.release_year();
@@ -1023,6 +1097,7 @@ impl StreamovieApp {
         category: MediaCategory,
         cx: &mut Context<Self>,
     ) {
+        self.remember_continue(media.clone(), category, 0.42);
         if category == MediaCategory::Series {
             let ready = self.active_details.as_ref().is_some_and(|details| {
                 details.media.id == media.id
@@ -1043,6 +1118,14 @@ impl StreamovieApp {
         let title = media.display_title();
         let sources = media.source_links();
         self.watch_sources(title, sources, cx);
+    }
+
+    fn remember_continue(&mut self, media: ApiMedia, category: MediaCategory, floor: f32) {
+        if media.id == 0 && media.display_title() == "Untitled" {
+            return;
+        }
+        self.continue_watching.touch(media, category, floor);
+        let _ = self.continue_storage.save(&self.continue_watching);
     }
 
     pub fn watch_sources(
@@ -1385,8 +1468,7 @@ impl StreamovieApp {
                     .relative()
                     .w(px(212.))
                     .h_full()
-                    .rounded(px(24.))
-                    .overflow_hidden()
+                    .rounded(px(22.))
                     .bg(fill)
                     .border_1()
                     .border_color(stroke)
@@ -1402,14 +1484,15 @@ impl StreamovieApp {
                             .left_0()
                             .right_0()
                             .h(px(72.))
+                            .rounded_t(px(22.))
                             .bg(sheen),
                     )
                     .child(
                         div()
                             .absolute()
                             .top_0()
-                            .left(px(16.))
-                            .right(px(16.))
+                            .left(px(28.))
+                            .right(px(28.))
                             .h(px(1.))
                             .bg(white().opacity(0.9)),
                     )
@@ -1435,92 +1518,109 @@ impl StreamovieApp {
 
     fn render_top_toolbar(&self, cx: &mut Context<Self>) -> AnyElement {
         let locale = self.locale();
-        let dict = locale.dict();
         let rtl = locale.is_rtl();
         let (fill, stroke, sheen) = liquid_glass();
         let lens = hsla(240.0 / 360.0, 0.08, 0.95, 1.0);
         let lens_stroke = hsla(0.0, 0.0, 0.0, 0.06);
-        let title = match self.section {
-            NavSection::Home => dict.nav.home,
-            NavSection::Movies => dict.nav.movies,
-            NavSection::Series => dict.nav.series,
-            NavSection::Search => dict.nav.search,
-            NavSection::Bookmarks => dict.nav.bookmarks,
-            NavSection::Settings => dict.nav.settings,
-        };
+        let title = self.section_title();
         div()
-            .w_full()
-            .flex_shrink_0()
-            .px(px(16.))
-            .pt(px(12.))
-            .pb(px(4.))
+            .absolute()
+            .top_0()
+            .left_0()
+            .right_0()
+            .h(px(HEADER_BAND))
+            .rounded_b(px(22.))
+            .bg(fill)
+            .border_1()
+            .border_color(stroke)
+            .shadow(liquid_shadow())
+            .child(div().absolute().inset_0().rounded_b(px(22.)).bg(sheen))
             .child(
                 div()
-                    .relative()
-                    .w_full()
-                    .h(px(48.))
-                    .rounded(px(16.))
-                    .overflow_hidden()
-                    .bg(fill)
-                    .border_1()
-                    .border_color(stroke)
-                    .shadow(liquid_shadow())
-                    .child(div().absolute().inset_0().rounded(px(16.)).bg(sheen))
+                    .absolute()
+                    .top(px(1.))
+                    .left(px(28.))
+                    .right(px(28.))
+                    .h(px(1.))
+                    .bg(white().opacity(0.95)),
+            )
+            .child(
+                directional_row(h_flex(), rtl)
+                    .absolute()
+                    .inset_0()
+                    .px(px(20.))
+                    .items_center()
+                    .justify_between()
+                    .gap(px(16.))
                     .child(
                         div()
-                            .absolute()
-                            .top(px(1.))
-                            .left(px(22.))
-                            .right(px(22.))
-                            .h(px(1.))
-                            .bg(white().opacity(0.95)),
+                            .flex_shrink_0()
+                            .text_size(px(17.))
+                            .font_semibold()
+                            .text_color(cx.theme().foreground)
+                            .child(title),
                     )
                     .child(
                         directional_row(h_flex(), rtl)
-                            .absolute()
-                            .inset_0()
-                            .px(px(16.))
+                            .gap(px(8.))
                             .items_center()
-                            .justify_between()
-                            .gap(px(16.))
-                            .child(
-                                div()
-                                    .flex_shrink_0()
-                                    .text_size(px(17.))
-                                    .font_semibold()
-                                    .text_color(cx.theme().foreground)
-                                    .child(title),
-                            )
-                            .child(
-                                directional_row(h_flex(), rtl)
-                                    .gap(px(8.))
-                                    .items_center()
-                                    .child(glass_search(self, lens, lens_stroke, cx))
-                                    .child(glass_chip(
-                                        "toolbar-locale",
-                                        Some(locale.short_badge()),
-                                        None,
-                                        lens,
-                                        lens_stroke,
-                                        cx.theme().foreground,
-                                        cx.listener(|this, _, window, cx| {
-                                            this.toggle_locale(Some(window), cx);
-                                        }),
-                                    )),
-                            ),
+                            .child(glass_search(self, lens, lens_stroke, cx))
+                            .child(glass_chip(
+                                "toolbar-locale",
+                                Some(locale.short_badge()),
+                                None,
+                                lens,
+                                lens_stroke,
+                                cx.theme().foreground,
+                                cx.listener(|this, _, window, cx| {
+                                    this.toggle_locale(Some(window), cx);
+                                }),
+                            )),
                     ),
             )
             .into_any_element()
     }
+
+    fn section_title(&self) -> &'static str {
+        let dict = self.locale().dict();
+        match self.section {
+            NavSection::Home => dict.nav.home,
+            NavSection::Movies => self.catalog_page_title(MediaCategory::Movie),
+            NavSection::Series => self.catalog_page_title(MediaCategory::Series),
+            NavSection::Search => dict.nav.search,
+            NavSection::Bookmarks => dict.nav.bookmarks,
+            NavSection::Settings => dict.nav.settings,
+        }
+    }
+
+    fn catalog_page_title(&self, category: MediaCategory) -> &'static str {
+        let dict = self.locale().dict();
+        let state = self.catalog_state(category);
+        if state.chart {
+            return match category {
+                MediaCategory::Movie => dict.browse.top_movies,
+                MediaCategory::Series => dict.browse.top_series,
+            };
+        }
+        if state.sort == BrowseSort::Imdb && state.genre_id == 0 {
+            return dict.browse.popular;
+        }
+        match category {
+            MediaCategory::Movie => dict.nav.movies,
+            MediaCategory::Series => dict.nav.series,
+        }
+    }
 }
 
+const HEADER_BAND: f32 = 76.;
+
 fn liquid_glass() -> (gpui_kit::Hsla, gpui_kit::Hsla, gpui_kit::Background) {
-    let fill = hsla(0.0, 0.0, 1.0, 0.86);
-    let stroke = hsla(0.0, 0.0, 0.0, 0.08);
+    let fill = hsla(0.0, 0.0, 1.0, 0.72);
+    let stroke = hsla(0.0, 0.0, 1.0, 0.66);
     let sheen = linear_gradient(
         180.,
-        linear_color_stop(white().opacity(0.72), 0.),
-        linear_color_stop(white().opacity(0.0), 1.),
+        linear_color_stop(white().opacity(0.88), 0.),
+        linear_color_stop(white().opacity(0.08), 1.),
     );
     (fill, stroke, sheen.into())
 }
@@ -1696,42 +1796,38 @@ impl Render for StreamovieApp {
                             .overflow_hidden()
                             .children(sidebar)
                             .child(
-                                v_flex()
+                                div()
+                                    .relative()
                                     .flex_1()
                                     .min_w_0()
                                     .h_full()
                                     .overflow_hidden()
-                                    .children(toolbar)
                                     .child(if playing {
                                         div()
-                                            .flex_1()
-                                            .min_h_0()
-                                            .overflow_hidden()
-                                            .child(content)
-                                            .into_any_element()
-                                    } else if self.section == NavSection::Settings
-                                        && self.active_details.is_none()
-                                    {
-                                        div()
-                                            .flex_1()
-                                            .min_h_0()
-                                            .px_8()
-                                            .py_6()
+                                            .size_full()
                                             .overflow_hidden()
                                             .child(content)
                                             .into_any_element()
                                     } else {
+                                        let settings = self.section == NavSection::Settings
+                                            && self.active_details.is_none();
                                         div()
                                             .id("streamovie-main-scroll")
-                                            .flex_1()
+                                            .size_full()
                                             .min_h_0()
                                             .min_w_0()
-                                            .w_full()
                                             .track_scroll(&self.main_scroll)
                                             .overflow_y_scrollbar()
-                                            .child(content)
+                                            .child(
+                                                div()
+                                                    .w_full()
+                                                    .pt(px(HEADER_BAND))
+                                                    .when(settings, |page| page.px_8().pb(px(24.)))
+                                                    .child(content),
+                                            )
                                             .into_any_element()
-                                    }),
+                                    })
+                                    .children(toolbar),
                             ),
                     ),
             )

@@ -23,7 +23,7 @@ use crate::{
             PosterCardStyle, cast_skeleton_row, empty_state, episode_skeleton_row,
             network_error_state, render_poster_card, skeleton_row,
         },
-        image_cache::render_remote_image,
+        image_cache::{render_remote_image, render_remote_image_corners},
     },
 };
 
@@ -937,11 +937,14 @@ fn episode_card(
                 .relative()
                 .w_full()
                 .h(px(164.))
+                .rounded_t(px(16.))
+                .overflow_hidden()
                 .bg(paint.chip)
-                .child(render_remote_image(
+                .child(render_remote_image_corners(
                     app,
                     thumb,
                     thumb_fallback,
+                    px(16.),
                     px(0.),
                     IconName::Frame,
                     None,

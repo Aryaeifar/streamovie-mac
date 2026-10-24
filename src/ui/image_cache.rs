@@ -360,13 +360,40 @@ pub fn render_remote_image(
     fallback_label: Option<&str>,
     cx: &mut Context<StreamovieApp>,
 ) -> AnyElement {
+    render_remote_image_corners(
+        app,
+        primary_url,
+        fallback_url,
+        radius,
+        radius,
+        fallback_icon,
+        fallback_label,
+        cx,
+    )
+}
+
+/// Same as [`render_remote_image`], with separate top and bottom radii.
+///
+/// GPUI clips overflow to a rectangle, so a rounded image still shows a square
+/// background unless the fill behind it uses the same corners.
+pub fn render_remote_image_corners(
+    app: &StreamovieApp,
+    primary_url: Option<&str>,
+    fallback_url: Option<&str>,
+    top: Pixels,
+    bottom: Pixels,
+    fallback_icon: IconName,
+    fallback_label: Option<&str>,
+    cx: &mut Context<StreamovieApp>,
+) -> AnyElement {
     let status = app.image_status(primary_url.unwrap_or(""), fallback_url, cx);
 
     div()
         .relative()
         .flex()
         .size_full()
-        .rounded(radius)
+        .rounded_t(top)
+        .rounded_b(bottom)
         .overflow_hidden()
         .bg(cx.theme().muted.opacity(0.35))
         .map(|slot| match status {
@@ -375,7 +402,8 @@ pub fn render_remote_image(
                     .absolute()
                     .inset_0()
                     .size_full()
-                    .rounded(radius)
+                    .rounded_t(top)
+                    .rounded_b(bottom)
                     .object_fit(ObjectFit::Cover),
             ),
             ImageStatus::Loading => slot.child(
@@ -383,7 +411,8 @@ pub fn render_remote_image(
                     .absolute()
                     .inset_0()
                     .size_full()
-                    .rounded(radius),
+                    .rounded_t(top)
+                    .rounded_b(bottom),
             ),
             ImageStatus::Missing => slot.child(
                 v_flex()

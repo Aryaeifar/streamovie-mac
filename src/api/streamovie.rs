@@ -16,7 +16,7 @@ use crate::{
 };
 
 /// Catalog genre “250 برتر تاریخ”. It holds the site’s Top 250 bucket, not chart order.
-const TOP250_GENRE_ID: u64 = 32;
+pub const TOP250_GENRE_ID: u64 = 32;
 const TOP250_PAGE_SIZE: usize = 30;
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
@@ -98,14 +98,18 @@ impl StreamovieClient {
         Ok(exclude_hidden_media(items))
     }
 
-    /// Every page of the Top 250 genre, kept only when it is on the official chart
-    /// and ordered by that rank.
+    /// Highest-rated pages for this kind, kept only when the title is on the
+    /// official IMDb chart and then ordered by that rank.
+    ///
+    /// Genre 32 is the site's mixed “best of history” bucket. It is not the
+    /// movie chart or the series chart, so the numbered lists scan each kind
+    /// on its own.
     pub fn fetch_imdb_chart(&self, category: MediaCategory) -> Result<Vec<ApiMedia>> {
         let mut collected = Vec::new();
         for page in 0..8 {
             let batch = match category {
-                MediaCategory::Movie => self.fetch_movies(page, TOP250_GENRE_ID, BrowseSort::Imdb),
-                MediaCategory::Series => self.fetch_series(page, TOP250_GENRE_ID, BrowseSort::Imdb),
+                MediaCategory::Movie => self.fetch_movies(page, 0, BrowseSort::Imdb),
+                MediaCategory::Series => self.fetch_series(page, 0, BrowseSort::Imdb),
             };
             match batch {
                 Ok(items) => {

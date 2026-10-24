@@ -71,6 +71,14 @@ pub struct HomeDict {
     pub empty: &'static str,
     pub unavailable_title: &'static str,
     pub unavailable_body: &'static str,
+    pub continue_watching: &'static str,
+    pub continue_subtitle: &'static str,
+    pub watchlist_row: &'static str,
+    pub watchlist_subtitle: &'static str,
+    pub browse_genre: &'static str,
+    pub browse_collection: &'static str,
+    pub banner_movies_body: &'static str,
+    pub banner_series_body: &'static str,
 }
 
 pub struct DetailsDict {
@@ -144,6 +152,9 @@ pub struct BrowseDict {
     pub load_error: &'static str,
     pub clear_filters: &'static str,
     pub searching_for: &'static str,
+    pub popular: &'static str,
+    pub top_movies: &'static str,
+    pub top_series: &'static str,
 }
 
 pub struct BookmarksDict {
@@ -298,6 +309,14 @@ pub static EN_DICTIONARY: Dictionary = Dictionary {
         empty: "Nothing to show here yet.",
         unavailable_title: "Featured titles are unavailable right now.",
         unavailable_body: "We couldn't reach the catalog. This is usually a network hiccup.",
+        continue_watching: "Continue Watching",
+        continue_subtitle: "Pick up where you left off",
+        watchlist_row: "Your Watchlist",
+        watchlist_subtitle: "Movies and series you saved",
+        browse_genre: "Browse by Genre",
+        browse_collection: "Browse by Collection",
+        banner_movies_body: "The films at the top of the chart, in official rank order.",
+        banner_series_body: "The series at the top of the chart, in official rank order.",
     },
     details: DetailsDict {
         movie: "Movie",
@@ -369,6 +388,9 @@ pub static EN_DICTIONARY: Dictionary = Dictionary {
         load_error: "Could not load titles",
         clear_filters: "Reset filters",
         searching_for: "Searching for",
+        popular: "Popular",
+        top_movies: "Top 250 Movies",
+        top_series: "Top 250 Series",
     },
     bookmarks: BookmarksDict {
         title: "Bookmarks & Watchlist",
@@ -504,6 +526,14 @@ pub static FA_DICTIONARY: Dictionary = Dictionary {
         empty: "چیزی برای نمایش وجود ندارد.",
         unavailable_title: "عنوان‌های ویژه در دسترس نیستند.",
         unavailable_body: "دسترسی به فهرست ممکن نشد. معمولاً یک اختلال شبکه‌ای است.",
+        continue_watching: "ادامه تماشا",
+        continue_subtitle: "از همان‌جا که ماندید ادامه دهید",
+        watchlist_row: "فهرست تماشای شما",
+        watchlist_subtitle: "فیلم‌ها و سریال‌هایی که ذخیره کرده‌اید",
+        browse_genre: "مرور بر اساس ژانر",
+        browse_collection: "مرور بر اساس مجموعه",
+        banner_movies_body: "فیلم‌های صدر جدول، به ترتیب رتبه رسمی.",
+        banner_series_body: "سریال‌های صدر جدول، به ترتیب رتبه رسمی.",
     },
     details: DetailsDict {
         movie: "فیلم",
@@ -575,6 +605,9 @@ pub static FA_DICTIONARY: Dictionary = Dictionary {
         load_error: "بارگذاری عنوان‌ها ممکن نشد",
         clear_filters: "پاک‌کردن فیلترها",
         searching_for: "جستجو برای",
+        popular: "پرطرفدار",
+        top_movies: "۲۵۰ فیلم برتر",
+        top_series: "۲۵۰ سریال برتر",
     },
     bookmarks: BookmarksDict {
         title: "نشان‌شده‌ها",

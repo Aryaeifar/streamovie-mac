@@ -2,11 +2,13 @@
 //! inside `~/Library/Application Support/com.streamovie.mac/`.
 
 pub mod bookmarks;
+pub mod history;
 pub mod settings;
 
 use std::{fs, path::PathBuf};
 
 pub use bookmarks::BookmarkStorage;
+pub use history::{ContinueEntry, ContinueStorage, ContinueWatchingData};
 pub use settings::{AccentPalette, PersistedSettings, SettingsStorage};
 
 const APP_DATA_FOLDER: &str = "com.streamovie.mac";

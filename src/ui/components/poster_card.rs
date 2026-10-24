@@ -4,17 +4,20 @@ use gpui_kit::component::{
     Icon, IconName, Sizable as _, StyledExt as _, WindowExt as _, h_flex, v_flex,
 };
 use gpui_kit::{
-    AnimationExt as _, AnyElement, Context, InteractiveElement as _, IntoElement,
+    AnimationExt as _,     AnyElement, Context, InteractiveElement as _, IntoElement,
     ParentElement as _, SharedString, SpringAnimation, SpringConfig,
-    StatefulInteractiveElement as _, Styled as _, deferred, div, prelude::FluentBuilder as _, px,
-    relative, white,
+    StatefulInteractiveElement as _, Styled as _, div, hsla, linear_color_stop,
+    linear_gradient, prelude::FluentBuilder as _, px, relative, white,
 };
 
 use crate::{
     app::StreamovieApp,
-    i18n::{Locale, directional_row, is_persian_text},
+    i18n::{Locale, directional_row, format_number, is_persian_text},
     models::{ApiMedia, MediaCategory},
-    ui::{apple::ApplePaint, image_cache::render_remote_image},
+    ui::{
+        apple::{ApplePaint, apple_progress},
+        image_cache::render_remote_image,
+    },
 };
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -67,6 +70,36 @@ pub fn render_poster_card_with_style(
     card_style: PosterCardStyle,
     cx: &mut Context<StreamovieApp>,
 ) -> AnyElement {
+    render_media_card(
+        app,
+        media,
+        category,
+        bookmarked,
+        locale,
+        id_scope,
+        card_style,
+        None,
+        None,
+        true,
+        cx,
+    )
+}
+
+/// Poster card with an Apple TV rank numeral and an optional continue-watching bar.
+#[allow(clippy::too_many_arguments)]
+pub fn render_media_card(
+    app: &StreamovieApp,
+    media: &ApiMedia,
+    category: MediaCategory,
+    bookmarked: bool,
+    locale: Locale,
+    id_scope: &str,
+    card_style: PosterCardStyle,
+    rank: Option<u16>,
+    progress: Option<f32>,
+    show_bookmark: bool,
+    cx: &mut Context<StreamovieApp>,
+) -> AnyElement {
     let dict = locale.dict();
     let rtl = locale.is_rtl();
     let media_id = media.id;
@@ -86,9 +119,17 @@ pub fn render_poster_card_with_style(
     } else {
         dict.home.movie
     };
-    let meta = match &year {
-        Some(year) => format!("{year}  ·  {kind_label}"),
-        None => kind_label.to_string(),
+    let meta = if rank.is_some() {
+        media
+            .genre_list()
+            .into_iter()
+            .next()
+            .unwrap_or_else(|| kind_label.to_string())
+    } else {
+        match &year {
+            Some(year) => format!("{year}  ·  {kind_label}"),
+            None => kind_label.to_string(),
+        }
     };
     let (card_w, frame_h) = card_style.frame();
     let paint = ApplePaint::from_cx(cx);
@@ -136,7 +177,38 @@ pub fn render_poster_card_with_style(
             this.open_details(media_for_open.clone(), category, cx);
         }))
         .child(artwork)
-        .child(
+        .when(rank.is_some(), |frame| {
+            frame.child(
+                div()
+                    .absolute()
+                    .bottom_0()
+                    .left_0()
+                    .right_0()
+                    .h(px(128.))
+                    .rounded_b(radius)
+                    .bg(linear_gradient(
+                        180.,
+                        linear_color_stop(hsla(0.0, 0.0, 0.0, 0.0), 0.),
+                        linear_color_stop(hsla(0.0, 0.0, 0.0, 0.82), 1.),
+                    )),
+            )
+        })
+        .when_some(rank, |frame, rank| {
+            frame.child(
+                div()
+                    .absolute()
+                    .bottom(px(4.))
+                    .when(!rtl, |label| label.left(px(12.)))
+                    .when(rtl, |label| label.right(px(12.)))
+                    .text_size(px(52.))
+                    .font_semibold()
+                    .line_height(relative(1.0))
+                    .text_color(white())
+                    .child(format_number(rank as usize, locale)),
+            )
+        })
+        .when(show_bookmark || (rating > 0.0 && rank.is_none()), |frame| {
+            frame.child(
             directional_row(h_flex(), rtl)
                 .absolute()
                 .top(px(8.))
@@ -144,7 +216,7 @@ pub fn render_poster_card_with_style(
                 .right(px(8.))
                 .justify_between()
                 .items_center()
-                .child(if rating > 0.0 {
+                .child(if rating > 0.0 && rank.is_none() {
                     div()
                         .px(px(6.))
                         .h(px(20.))
@@ -160,7 +232,8 @@ pub fn render_poster_card_with_style(
                 } else {
                     div().into_any_element()
                 })
-                .child(
+                .when(show_bookmark, |row| {
+                    row.child(
                     h_flex()
                         .id(bookmark_btn_id)
                         .size(px(26.))
@@ -198,8 +271,26 @@ pub fn render_poster_card_with_style(
                             };
                             window.push_notification(msg, cx);
                         })),
-                ),
-        )
+                    )
+                }),
+            )
+        })
+        .when_some(progress, |frame, fraction| {
+            frame.child(
+                div()
+                    .absolute()
+                    .bottom(px(0.))
+                    .left(px(0.))
+                    .right(px(0.))
+                    .px(px(8.))
+                    .pb(px(8.))
+                    .child(apple_progress(
+                        fraction,
+                        white(),
+                        white().opacity(0.35),
+                    )),
+            )
+        })
         .absolute()
         .with_spring(
             SharedString::from(format!("scale-{card_id}")),
@@ -221,12 +312,10 @@ pub fn render_poster_card_with_style(
         .w(card_w)
         .h(frame_h)
         .flex_none()
-        .child(div().w(card_w).h(frame_h))
-        .child(if hovered {
-            deferred(frame).priority(1).into_any_element()
-        } else {
-            frame.into_any_element()
-        });
+        .rounded(radius)
+        .bg(paint.chip)
+        .child(div().w(card_w).h(frame_h).rounded(radius).bg(paint.chip))
+        .child(frame);
 
     v_flex()
         .w(card_w)

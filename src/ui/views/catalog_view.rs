@@ -6,16 +6,21 @@ use gpui_kit::component::{
     h_flex, v_flex,
 };
 use gpui_kit::{
-    AnyElement, Context, IntoElement, ParentElement as _, SharedString, Styled as _, div,
-    prelude::FluentBuilder as _, px,
+    AnyElement, Context, InteractiveElement as _, IntoElement, ParentElement as _, SharedString,
+    StatefulInteractiveElement as _, Styled as _, div, prelude::FluentBuilder as _, px,
 };
 
 use crate::{
+    api::streamovie::TOP250_GENRE_ID,
     app::StreamovieApp,
-    i18n::{directional_row, format_count},
-    models::{BrowseSort, MediaCategory},
+    i18n::{Dictionary, directional_row, format_count},
+    models::{
+        BrowseSort, MediaCategory,
+        imdb_top250::chart_rank,
+    },
+    state::{CatalogGridState, NavSection},
     ui::components::{
-        PosterCardStyle, empty_state, network_error_state, render_poster_card, skeleton_card,
+        PosterCardStyle, empty_state, network_error_state, render_media_card, skeleton_card,
         skeleton_grid,
     },
 };
@@ -31,64 +36,55 @@ pub fn render_catalog_view(
     let state = app.catalog_state(category).clone();
     let genres = app.genres().to_vec();
 
-    let title = match category {
-        MediaCategory::Movie => dict.nav.movies,
-        MediaCategory::Series => dict.nav.series,
+    let title = if state.chart {
+        match category {
+            MediaCategory::Movie => dict.browse.top_movies,
+            MediaCategory::Series => dict.browse.top_series,
+        }
+    } else if state.sort == BrowseSort::Imdb && state.genre_id == 0 {
+        dict.browse.popular
+    } else {
+        match category {
+            MediaCategory::Movie => dict.nav.movies,
+            MediaCategory::Series => dict.nav.series,
+        }
     };
-    let subtitle = match category {
-        MediaCategory::Movie => dict.home.movies_subtitle,
-        MediaCategory::Series => dict.home.series_subtitle,
+    let subtitle = if state.chart {
+        match category {
+            MediaCategory::Movie => dict.home.imdb_movies_subtitle,
+            MediaCategory::Series => dict.home.imdb_series_subtitle,
+        }
+    } else {
+        match category {
+            MediaCategory::Movie => dict.home.movies_subtitle,
+            MediaCategory::Series => dict.home.series_subtitle,
+        }
     };
 
-    let mut genre_buttons = Vec::new();
-    let active_genre = state.genre_id;
-    genre_buttons.push(
-        Button::new(SharedString::from(format!(
-            "genre-all-{}",
-            category.as_str()
-        )))
-        .small()
-        .rounded(px(13.))
-        .selected(active_genre == 0)
-        .when(active_genre == 0, |btn| btn.primary())
-        .when(active_genre != 0, |btn| btn.secondary())
-        .label(dict.browse.all_genres)
-        .on_click(cx.listener(move |this, _, _, cx| {
-            this.set_catalog_genre(category, 0, cx);
-        })),
-    );
-    for genre in genres.into_iter().take(16) {
-        let gid = genre.id;
-        let selected = active_genre == gid;
-        genre_buttons.push(
-            Button::new(SharedString::from(format!(
-                "genre-{}-{}",
-                category.as_str(),
-                gid
-            )))
-            .small()
-            .rounded(px(13.))
-            .selected(selected)
-            .when(selected, |btn| btn.primary())
-            .when(!selected, |btn| btn.secondary())
-            .label(genre.display_name())
-            .on_click(cx.listener(move |this, _, _, cx| {
-                this.set_catalog_genre(category, gid, cx);
-            })),
-        );
-    }
+    let list_chips = list_filter_chips(app, category, &state, cx);
+    let detail_chips = detail_filter_chips(category, &state, &genres, dict, cx);
 
     let cards: Vec<_> = state
         .items
         .iter()
-        .map(|media| {
-            render_poster_card(
+        .enumerate()
+        .map(|(index, media)| {
+            let rank = if state.chart {
+                chart_rank(media, category).or(Some((index + 1) as u16))
+            } else {
+                None
+            };
+            render_media_card(
                 app,
                 media,
                 category,
                 app.is_bookmarked(media.id),
                 locale,
                 &format!("catalog-{}", category.as_str()),
+                PosterCardStyle::Poster,
+                rank,
+                None,
+                true,
                 cx,
             )
         })
@@ -125,41 +121,26 @@ pub fn render_catalog_view(
                 ),
         )
         .child(
-            directional_row(h_flex(), rtl)
+            v_flex()
                 .w_full()
                 .gap_2()
-                .flex_wrap()
                 .child(
-                    Button::new(SharedString::from(format!(
-                        "sort-new-{}",
-                        category.as_str()
-                    )))
-                    .small()
-                    .rounded(px(13.))
-                    .selected(state.sort == BrowseSort::Created)
-                    .when(state.sort == BrowseSort::Created, |btn| btn.primary())
-                    .when(state.sort != BrowseSort::Created, |btn| btn.secondary())
-                    .label(dict.browse.sort_latest)
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        this.set_catalog_sort(category, BrowseSort::Created, cx);
-                    })),
+                    div()
+                        .text_size(px(12.))
+                        .font_semibold()
+                        .text_color(cx.theme().muted_foreground)
+                        .child(dict.browse.filters),
                 )
-                .child(
-                    Button::new(SharedString::from(format!(
-                        "sort-imdb-{}",
-                        category.as_str()
-                    )))
-                    .small()
-                    .rounded(px(13.))
-                    .selected(state.sort == BrowseSort::Imdb)
-                    .when(state.sort == BrowseSort::Imdb, |btn| btn.primary())
-                    .when(state.sort != BrowseSort::Imdb, |btn| btn.secondary())
-                    .label(dict.browse.sort_imdb)
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        this.set_catalog_sort(category, BrowseSort::Imdb, cx);
-                    })),
-                )
-                .children(genre_buttons),
+                .child(filter_scroller(
+                    &format!("list-filters-{}", category.as_str()),
+                    rtl,
+                    list_chips,
+                ))
+                .child(filter_scroller(
+                    &format!("detail-filters-{}", category.as_str()),
+                    rtl,
+                    detail_chips,
+                )),
         )
         .child(if state.loading && state.items.is_empty() {
             skeleton_grid(8, rtl)
@@ -241,5 +222,149 @@ pub fn render_catalog_view(
                 })
                 .into_any_element()
         })
+        .into_any_element()
+}
+
+fn list_filter_chips(
+    _app: &StreamovieApp,
+    category: MediaCategory,
+    state: &CatalogGridState,
+    cx: &mut Context<StreamovieApp>,
+) -> Vec<AnyElement> {
+    let dict = _app.locale().dict();
+    let plain = !state.chart && state.sort == BrowseSort::Created && state.genre_id == 0;
+    let movies = category == MediaCategory::Movie && plain;
+    let series = category == MediaCategory::Series && plain;
+    let popular = !state.chart && state.sort == BrowseSort::Imdb && state.genre_id == 0;
+    let top_movies = category == MediaCategory::Movie && state.chart;
+    let top_series = category == MediaCategory::Series && state.chart;
+    vec![
+        filter_chip(
+            format!("list-movies-{}", category.as_str()),
+            dict.browse.movies,
+            movies,
+            cx,
+            |this, cx| this.navigate_to_catalog_with_sort(NavSection::Movies, BrowseSort::Created, cx),
+        ),
+        filter_chip(
+            format!("list-series-{}", category.as_str()),
+            dict.browse.series,
+            series,
+            cx,
+            |this, cx| this.navigate_to_catalog_with_sort(NavSection::Series, BrowseSort::Created, cx),
+        ),
+        filter_chip(
+            format!("list-popular-{}", category.as_str()),
+            dict.browse.popular,
+            popular,
+            cx,
+            |this, cx| this.open_popular_list(cx),
+        ),
+        filter_chip(
+            format!("list-top-movies-{}", category.as_str()),
+            dict.browse.top_movies,
+            top_movies,
+            cx,
+            |this, cx| this.open_chart(MediaCategory::Movie, cx),
+        ),
+        filter_chip(
+            format!("list-top-series-{}", category.as_str()),
+            dict.browse.top_series,
+            top_series,
+            cx,
+            |this, cx| this.open_chart(MediaCategory::Series, cx),
+        ),
+    ]
+}
+
+fn detail_filter_chips(
+    category: MediaCategory,
+    state: &CatalogGridState,
+    genres: &[crate::models::ApiGenre],
+    dict: &Dictionary,
+    cx: &mut Context<StreamovieApp>,
+) -> Vec<AnyElement> {
+    let mut chips = vec![
+        filter_chip(
+            format!("sort-new-{}", category.as_str()),
+            dict.browse.sort_latest,
+            !state.chart && state.sort == BrowseSort::Created,
+            cx,
+            move |this, cx| this.set_catalog_sort(category, BrowseSort::Created, cx),
+        ),
+        filter_chip(
+            format!("sort-imdb-{}", category.as_str()),
+            dict.browse.sort_imdb,
+            !state.chart && state.sort == BrowseSort::Imdb,
+            cx,
+            move |this, cx| this.set_catalog_sort(category, BrowseSort::Imdb, cx),
+        ),
+        filter_chip(
+            format!("genre-all-{}", category.as_str()),
+            dict.browse.all_genres,
+            !state.chart && state.genre_id == 0,
+            cx,
+            move |this, cx| this.set_catalog_genre(category, 0, cx),
+        ),
+    ];
+    for genre in genres
+        .iter()
+        .filter(|genre| genre.id != 0 && genre.id != TOP250_GENRE_ID)
+    {
+        let gid = genre.id;
+        let selected = !state.chart && state.genre_id == gid;
+        chips.push(filter_chip(
+            format!("genre-{}-{}", category.as_str(), gid),
+            genre.display_name(),
+            selected,
+            cx,
+            move |this, cx| this.set_catalog_genre(category, gid, cx),
+        ));
+    }
+    let dirty = state.chart || state.genre_id != 0 || state.sort != BrowseSort::Created;
+    if dirty {
+        chips.push(filter_chip(
+            format!("clear-filters-{}", category.as_str()),
+            dict.browse.clear_filters,
+            false,
+            cx,
+            move |this, cx| this.reset_catalog_filters(category, cx),
+        ));
+    }
+    chips
+}
+
+fn filter_chip(
+    id: String,
+    label: impl Into<SharedString>,
+    selected: bool,
+    cx: &mut Context<StreamovieApp>,
+    on_click: impl Fn(&mut StreamovieApp, &mut Context<StreamovieApp>) + 'static,
+) -> AnyElement {
+    Button::new(SharedString::from(id))
+        .small()
+        .rounded(px(13.))
+        .selected(selected)
+        .when(selected, |btn| btn.primary())
+        .when(!selected, |btn| btn.secondary())
+        .label(label)
+        .on_click(cx.listener(move |this, _, _, cx| on_click(this, cx)))
+        .into_any_element()
+}
+
+fn filter_scroller(id: &str, rtl: bool, chips: Vec<AnyElement>) -> AnyElement {
+    div()
+        .id(SharedString::from(id))
+        .w_full()
+        .min_w_0()
+        .overflow_x_scroll()
+        .child(
+            h_flex()
+                .flex_none()
+                .gap_2()
+                .py(px(2.))
+                .when(rtl, |row| row.flex_row_reverse())
+                .children(chips),
+        )
         .into_any_element()
 }

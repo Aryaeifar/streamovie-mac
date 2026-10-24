@@ -116,12 +116,16 @@ pub struct CatalogGridState {
     pub category: MediaCategory,
     pub sort: BrowseSort,
     pub genre_id: u64,
+    /// Official IMDb Top 250 chart for this category, ordered and numbered by rank.
+    pub chart: bool,
     pub page: usize,
     pub loading: bool,
     pub loading_more: bool,
     pub has_more: bool,
     pub error: Option<String>,
     pub items: Vec<ApiMedia>,
+    /// Bumped on every catalog fetch so an older response cannot replace the list.
+    pub fetch_generation: u64,
 }
 
 impl CatalogGridState {
@@ -130,12 +134,14 @@ impl CatalogGridState {
             category,
             sort: BrowseSort::Created,
             genre_id: 0,
+            chart: false,
             page: 0,
             loading: false,
             loading_more: false,
             has_more: true,
             error: None,
             items: Vec::new(),
+            fetch_generation: 0,
         }
     }
 }
