@@ -26,6 +26,7 @@ fn main() {
     app.run(|cx| {
         // Initialize uni-kit (gpui-base + gpui-component + themes + overlays)
         gpui_kit::init(cx);
+        i18n::install_fonts(cx);
 
         // Register HTTP client so GPUI `img()` can fetch remote movie/series posters & backdrops
         if let Ok(http_client) = reqwest_client::ReqwestClient::user_agent("Streamovie-macOS/0.1.0")

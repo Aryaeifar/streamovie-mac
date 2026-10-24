@@ -150,7 +150,8 @@ pub fn render_settings_view(
                         .gap_2()
                         .child(
                             Button::new("settings-reset")
-                                .outline()
+                                .secondary()
+                                .rounded(px(13.))
                                 .label(dict.settings.reset)
                                 .on_click(cx.listener(|this, _, window, cx| {
                                     this.reset_settings(Some(window), cx);
@@ -159,6 +160,7 @@ pub fn render_settings_view(
                         .child(
                             Button::new("settings-save")
                                 .primary()
+                                .rounded(px(13.))
                                 .label(dict.settings.save)
                                 .on_click(cx.listener(|this, _, window, cx| {
                                     this.save_settings_now(cx);

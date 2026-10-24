@@ -6,7 +6,7 @@ use gpui_kit::component::{
     button::{Button, ButtonVariants as _},
     h_flex, v_flex,
 };
-use gpui_kit::{AnyElement, Context, IntoElement, ParentElement as _, Styled as _, div, px, white};
+use gpui_kit::{AnyElement, Context, IntoElement, ParentElement as _, Styled as _, div, px};
 
 pub fn render_player_view(
     app: &StreamovieApp,
@@ -58,7 +58,7 @@ pub fn render_player_view(
                             div()
                                 .text_sm()
                                 .font_semibold()
-                                .text_color(white())
+                                .text_color(cx.theme().foreground)
                                 .whitespace_nowrap()
                                 .overflow_hidden()
                                 .text_ellipsis()

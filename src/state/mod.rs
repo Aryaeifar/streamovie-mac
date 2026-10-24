@@ -100,7 +100,10 @@ impl MediaFilterTab {
 #[derive(Clone, Debug, Default)]
 pub struct HomeFeedState {
     pub loading: bool,
-    pub error: Option<String>,
+    pub latest_movies_error: Option<String>,
+    pub latest_series_error: Option<String>,
+    pub imdb_movies_error: Option<String>,
+    pub imdb_series_error: Option<String>,
     pub latest_movies: Vec<ApiMedia>,
     pub latest_series: Vec<ApiMedia>,
     pub imdb_movies: Vec<ApiMedia>,

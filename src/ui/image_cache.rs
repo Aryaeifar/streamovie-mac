@@ -23,7 +23,9 @@ use std::{
     time::Duration,
 };
 
-use gpui_kit::component::{ActiveTheme as _, Icon, IconName, Sizable as _, h_flex, v_flex};
+use gpui_kit::component::{
+    ActiveTheme as _, Icon, IconName, Sizable as _, h_flex, skeleton::Skeleton, v_flex,
+};
 use gpui_kit::{
     AnyElement, Context, Image, ImageFormat, IntoElement, ObjectFit, ParentElement as _, Pixels,
     Styled as _, StyledImage as _, div, img, prelude::FluentBuilder as _,
@@ -150,6 +152,44 @@ impl ImageCache {
         .detach();
 
         None
+    }
+
+    /// Distinguishes an in-flight download from a failed or missing image.
+    /// `get_or_load` returns `None` for all three, which would otherwise keep a
+    /// skeleton on screen after the request has already failed.
+    pub(crate) fn status(
+        &self,
+        primary_url: &str,
+        fallback_url: Option<&str>,
+        cx: &mut Context<StreamovieApp>,
+    ) -> ImageStatus {
+        let primary = primary_url.trim();
+        let fallback = fallback_url
+            .map(str::trim)
+            .filter(|value| !value.is_empty());
+        let Some(key) = (!primary.is_empty())
+            .then(|| primary.to_string())
+            .or_else(|| fallback.map(str::to_string))
+        else {
+            return ImageStatus::Missing;
+        };
+
+        if let Some(image) = self.get_or_load(primary, fallback, cx) {
+            return ImageStatus::Ready(image);
+        }
+
+        let failed = self
+            .inner
+            .lock()
+            .ok()
+            .is_some_and(|guard| guard.failed.contains(&key));
+        if failed {
+            if let Some(fallback_url) = fallback.filter(|url| *url != key) {
+                return self.status(fallback_url, None, cx);
+            }
+            return ImageStatus::Missing;
+        }
+        ImageStatus::Loading
     }
 
     fn disk_path_for(&self, key: &str) -> PathBuf {
@@ -302,6 +342,12 @@ pub fn detect_image_format(bytes: &[u8], url: &str) -> Option<ImageFormat> {
     }
 }
 
+pub(crate) enum ImageStatus {
+    Ready(Arc<Image>),
+    Loading,
+    Missing,
+}
+
 /// Renders a remote image inside a `.relative().flex().size_full().overflow_hidden()` container
 /// with `.absolute().inset_0().size_full().object_fit(ObjectFit::Cover)` so GPUI/Taffy
 /// always paints the image across the full bounds of its parent slot.
@@ -314,14 +360,7 @@ pub fn render_remote_image(
     fallback_label: Option<&str>,
     cx: &mut Context<StreamovieApp>,
 ) -> AnyElement {
-    let resolved = primary_url
-        .filter(|s| !s.trim().is_empty())
-        .and_then(|url| app.resolve_image(url, fallback_url, cx))
-        .or_else(|| {
-            fallback_url
-                .filter(|s| !s.trim().is_empty())
-                .and_then(|fb| app.resolve_image(fb, None, cx))
-        });
+    let status = app.image_status(primary_url.unwrap_or(""), fallback_url, cx);
 
     div()
         .relative()
@@ -330,8 +369,8 @@ pub fn render_remote_image(
         .rounded(radius)
         .overflow_hidden()
         .bg(cx.theme().muted.opacity(0.35))
-        .map(|slot| match resolved {
-            Some(arc_image) => slot.child(
+        .map(|slot| match status {
+            ImageStatus::Ready(arc_image) => slot.child(
                 img(arc_image)
                     .absolute()
                     .inset_0()
@@ -339,7 +378,14 @@ pub fn render_remote_image(
                     .rounded(radius)
                     .object_fit(ObjectFit::Cover),
             ),
-            None => slot.child(
+            ImageStatus::Loading => slot.child(
+                Skeleton::new()
+                    .absolute()
+                    .inset_0()
+                    .size_full()
+                    .rounded(radius),
+            ),
+            ImageStatus::Missing => slot.child(
                 v_flex()
                     .size_full()
                     .items_center()

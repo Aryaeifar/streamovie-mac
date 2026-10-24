@@ -163,6 +163,10 @@ pub struct CommonDict {
     pub language: &'static str,
     pub english: &'static str,
     pub persian: &'static str,
+    pub network_title: &'static str,
+    pub network_body: &'static str,
+    pub movies_failed: &'static str,
+    pub series_failed: &'static str,
 }
 
 pub struct ThemeNamesDict {
@@ -310,7 +314,7 @@ pub static EN_DICTIONARY: Dictionary = Dictionary {
         year: "Year",
         duration: "Runtime",
         genres: "Genres",
-        cast: "Cast",
+        cast: "Cast & Crew",
         posters: "Posters",
         info: "Details",
         more_like_this: "More like this",
@@ -402,6 +406,10 @@ pub static EN_DICTIONARY: Dictionary = Dictionary {
         language: "Language",
         english: "English",
         persian: "فارسی",
+        network_title: "Can't connect",
+        network_body: "We couldn't reach the catalog. Check your connection and try again.",
+        movies_failed: "Couldn't load movies",
+        series_failed: "Couldn't load series",
     },
     settings: SettingsDict {
         title: "Settings",
@@ -517,7 +525,7 @@ pub static FA_DICTIONARY: Dictionary = Dictionary {
         year: "سال",
         duration: "مدت زمان",
         genres: "ژانرها",
-        cast: "بازیگران",
+        cast: "بازیگران و عوامل",
         posters: "پوسترها",
         info: "جزئیات",
         more_like_this: "عنوان‌های مشابه",
@@ -609,6 +617,10 @@ pub static FA_DICTIONARY: Dictionary = Dictionary {
         language: "زبان",
         english: "English",
         persian: "فارسی",
+        network_title: "اتصال برقرار نشد",
+        network_body: "دسترسی به فهرست ممکن نشد. اتصال را بررسی کنید و دوباره تلاش کنید.",
+        movies_failed: "بارگذاری فیلم‌ها ممکن نشد",
+        series_failed: "بارگذاری سریال‌ها ممکن نشد",
     },
     settings: SettingsDict {
         title: "تنظیمات",

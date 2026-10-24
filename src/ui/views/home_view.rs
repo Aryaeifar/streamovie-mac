@@ -1,8 +1,9 @@
 //! Home discovery: horizontal rails.
 
 use gpui_kit::component::{
-    ActiveTheme as _, IconName, Sizable as _, StyledExt as _, alert::Alert, button::Button, h_flex,
-    skeleton::Skeleton, v_flex,
+    IconName, Sizable as _, StyledExt as _,
+    button::{Button, ButtonVariants as _},
+    h_flex, v_flex,
 };
 use gpui_kit::{
     AnyElement, Context, InteractiveElement as _, IntoElement, MouseButton, MouseDownEvent,
@@ -15,7 +16,10 @@ use crate::{
     i18n::directional_row,
     models::{ApiMedia, BrowseSort, MediaCategory},
     state::NavSection,
-    ui::components::{PosterCardStyle, render_poster_card_with_style},
+    ui::components::{
+        PosterCardStyle, empty_state, home_skeleton, network_error_state,
+        render_poster_card_with_style, skeleton_row,
+    },
 };
 
 pub fn render_home_view(app: &StreamovieApp, cx: &mut Context<StreamovieApp>) -> AnyElement {
@@ -24,59 +28,32 @@ pub fn render_home_view(app: &StreamovieApp, cx: &mut Context<StreamovieApp>) ->
     let rtl = locale.is_rtl();
     let home = app.home_state();
 
-    if home.loading && home.latest_movies.is_empty() && home.latest_series.is_empty() {
-        return v_flex()
-            .w_full()
-            .px(px(24.))
-            .pt(px(20.))
-            .gap_6()
-            .child(
-                h_flex()
-                    .px_8()
-                    .gap_3()
-                    .child(Skeleton::new().w(px(168.)).h(px(252.)).rounded(px(10.)))
-                    .child(Skeleton::new().w(px(168.)).h(px(252.)).rounded(px(10.)))
-                    .child(Skeleton::new().w(px(168.)).h(px(252.)).rounded(px(10.))),
-            )
-            .into_any_element();
+    if home.loading
+        && home.latest_movies.is_empty()
+        && home.latest_series.is_empty()
+        && home.imdb_movies.is_empty()
+        && home.imdb_series.is_empty()
+    {
+        return home_skeleton(rtl);
     }
-
-    let load_error = home.error.clone().filter(|_| {
-        home.latest_movies.is_empty()
-            && home.latest_series.is_empty()
-            && home.imdb_movies.is_empty()
-            && home.imdb_series.is_empty()
-    });
 
     v_flex()
         .w_full()
         .min_w_0()
         .max_w_full()
         .overflow_hidden()
-        .gap(px(28.))
-        .pt(px(12.))
-        .pb_16()
-        .when_some(load_error, |col, err| {
-            col.child(
-                v_flex()
-                    .px(px(24.))
-                    .gap_3()
-                    .child(Alert::error("home-load-error", err).title(dict.home.unavailable_title))
-                    .child(
-                        Button::new("home-retry")
-                            .outline()
-                            .icon(IconName::RefreshCw)
-                            .label(dict.actions.retry)
-                            .on_click(cx.listener(|this, _, _, cx| this.reload_home_feeds(cx))),
-                    ),
-            )
-        })
+        .gap(px(36.))
+        .pt(px(8.))
+        .pb(px(56.))
         .child(rail(
             app,
             0,
             "latest-series",
             dict.home.series_row,
             &home.latest_series,
+            home.latest_series_error.as_deref(),
+            dict.common.series_failed,
+            home.loading,
             MediaCategory::Series,
             NavSection::Series,
             BrowseSort::Created,
@@ -90,6 +67,9 @@ pub fn render_home_view(app: &StreamovieApp, cx: &mut Context<StreamovieApp>) ->
             "latest-movies",
             dict.home.movies,
             &home.latest_movies,
+            home.latest_movies_error.as_deref(),
+            dict.common.movies_failed,
+            home.loading,
             MediaCategory::Movie,
             NavSection::Movies,
             BrowseSort::Created,
@@ -103,6 +83,9 @@ pub fn render_home_view(app: &StreamovieApp, cx: &mut Context<StreamovieApp>) ->
             "imdb-movies",
             dict.home.imdb_movies,
             &home.imdb_movies,
+            home.imdb_movies_error.as_deref(),
+            dict.common.movies_failed,
+            home.loading,
             MediaCategory::Movie,
             NavSection::Movies,
             BrowseSort::Imdb,
@@ -116,6 +99,9 @@ pub fn render_home_view(app: &StreamovieApp, cx: &mut Context<StreamovieApp>) ->
             "imdb-series",
             dict.home.imdb_series,
             &home.imdb_series,
+            home.imdb_series_error.as_deref(),
+            dict.common.series_failed,
+            home.loading,
             MediaCategory::Series,
             NavSection::Series,
             BrowseSort::Imdb,
@@ -133,6 +119,9 @@ fn rail(
     section_key: &str,
     title: &str,
     items: &[ApiMedia],
+    fetch_error: Option<&str>,
+    failed_title: &str,
+    loading: bool,
     category: MediaCategory,
     target_nav: NavSection,
     target_sort: BrowseSort,
@@ -144,7 +133,7 @@ fn rail(
     let locale = app.locale();
     let scroll_handle = app.home_row_scroll_handle(row_index).clone();
     let (card_w, _) = card_style.frame();
-    let card_gap = px(16.);
+    let card_gap = px(20.);
     let cards: Vec<_> = items
         .iter()
         .take(18)
@@ -172,8 +161,8 @@ fn rail(
         .w_full()
         .min_w_0()
         .max_w_full()
-        .px(px(24.))
-        .gap(px(10.))
+        .px(px(32.))
+        .gap(px(12.))
         .child(
             directional_row(h_flex(), rtl)
                 .w_full()
@@ -191,7 +180,8 @@ fn rail(
                         .child(
                             Button::new(SharedString::from(format!("rail-prev-{section_key}")))
                                 .small()
-                                .outline()
+                                .secondary()
+                                .rounded(px(12.))
                                 .icon(if rtl {
                                     IconName::ChevronRight
                                 } else {
@@ -204,7 +194,8 @@ fn rail(
                         .child(
                             Button::new(SharedString::from(format!("rail-next-{section_key}")))
                                 .small()
-                                .outline()
+                                .secondary()
+                                .rounded(px(12.))
                                 .icon(if rtl {
                                     IconName::ChevronLeft
                                 } else {
@@ -217,7 +208,7 @@ fn rail(
                         .child(
                             Button::new(SharedString::from(format!("rail-more-{section_key}")))
                                 .small()
-                                .outline()
+                                .ghost()
                                 .label(dict.actions.see_more)
                                 .on_click(cx.listener(move |this, _, _, cx| {
                                     this.navigate_to_catalog_with_sort(target_nav, target_sort, cx);
@@ -225,12 +216,32 @@ fn rail(
                         ),
                 ),
         )
-        .child(if cards.is_empty() {
-            div()
-                .text_sm()
-                .text_color(cx.theme().muted_foreground)
-                .child(dict.home.empty)
-                .into_any_element()
+        .child(if cards.is_empty() && loading {
+            let count = if card_style == PosterCardStyle::Widescreen {
+                4
+            } else {
+                6
+            };
+            skeleton_row(card_style, count, rtl)
+        } else if cards.is_empty() && fetch_error.is_some() {
+            network_error_state(
+                dict.common.network_title,
+                failed_title,
+                dict.common.network_body,
+                fetch_error.map(str::to_string),
+                Some(
+                    Button::new(SharedString::from(format!("rail-retry-{section_key}")))
+                        .primary()
+                        .rounded(px(13.))
+                        .icon(IconName::RefreshCw)
+                        .label(dict.actions.retry)
+                        .on_click(cx.listener(|this, _, _, cx| this.reload_home_feeds(cx)))
+                        .into_any_element(),
+                ),
+                cx,
+            )
+        } else if cards.is_empty() {
+            empty_state(IconName::Inbox, dict.home.empty, "", None, cx)
         } else {
             div()
                 .id(SharedString::from(format!("rail-{section_key}")))
@@ -262,7 +273,7 @@ fn rail(
                         .flex_none()
                         .w(row_w)
                         .gap(card_gap)
-                        .py(px(12.))
+                        .py(px(16.))
                         .when(rtl, |row| row.flex_row_reverse())
                         .children(cards),
                 )

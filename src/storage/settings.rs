@@ -148,9 +148,9 @@ impl AccentPalette {
         match self {
             // (canvas_bg, card_surface, sidebar_bg)
             Self::Apple => (
-                hsla(240.0 / 360.0, 0.06, 0.07, 1.0),
-                hsla(240.0 / 360.0, 0.04, 0.14, 0.86),
-                hsla(240.0 / 360.0, 0.05, 0.10, 0.72),
+                hsla(240.0 / 360.0, 0.02, 0.03, 1.0),
+                hsla(240.0 / 360.0, 0.04, 0.16, 0.55),
+                hsla(240.0 / 360.0, 0.06, 0.22, 0.34),
             ),
             Self::Paramount => (
                 hsla(240.0 / 360.0, 0.03, 0.11, 1.0),
@@ -234,8 +234,8 @@ impl PersistedSettings {
             theme.primary_foreground = hsla(0.0, 0.0, 1.0, 1.0);
             theme.ring = primary;
             theme.sidebar_primary = primary;
-            theme.radius = px(10.);
-            theme.radius_lg = px(14.);
+            theme.radius = px(13.);
+            theme.radius_lg = px(16.);
             theme.font_family = font_family;
 
             if theme.is_dark() {
@@ -252,20 +252,48 @@ impl PersistedSettings {
                 theme.input = hsla(240.0 / 360.0, 0.04, 0.20, 0.55);
                 theme.title_bar = hsla(240.0 / 360.0, 0.06, 0.16, 0.58);
                 theme.title_bar_border = hsla(0.0, 0.0, 1.0, 0.12);
-            } else if apple {
-                theme.background = hsla(240.0 / 360.0, 0.16, 0.97, 1.0);
-                theme.foreground = hsla(240.0 / 360.0, 0.06, 0.13, 1.0);
-                theme.popover = hsla(0.0, 0.0, 1.0, 0.82);
-                theme.popover_foreground = hsla(240.0 / 360.0, 0.06, 0.13, 1.0);
-                theme.sidebar = hsla(0.0, 0.0, 1.0, 0.62);
-                theme.sidebar_foreground = hsla(240.0 / 360.0, 0.06, 0.13, 1.0);
+            } else {
+                let ink = hsla(240.0 / 360.0, 0.03, 0.118, 1.0);
+                let canvas = hsla(240.0 / 360.0, 0.11, 0.965, 1.0);
+                theme.background = canvas;
+                theme.foreground = ink;
+                theme.popover = hsla(0.0, 0.0, 1.0, 0.96);
+                theme.popover_foreground = ink;
+                theme.sidebar = hsla(0.0, 0.0, 1.0, 0.86);
+                theme.sidebar_foreground = ink;
                 theme.sidebar_border = hsla(0.0, 0.0, 0.0, 0.08);
-                theme.muted = hsla(240.0 / 360.0, 0.10, 0.94, 1.0);
-                theme.muted_foreground = hsla(240.0 / 360.0, 0.04, 0.36, 1.0);
+                theme.sidebar_accent = hsla(0.0, 0.0, 0.0, 0.05);
+                theme.sidebar_accent_foreground = ink;
+                theme.muted = hsla(240.0 / 360.0, 0.08, 0.94, 1.0);
+                theme.muted_foreground = hsla(240.0 / 360.0, 0.02, 0.44, 1.0);
                 theme.border = hsla(0.0, 0.0, 0.0, 0.08);
-                theme.input = hsla(0.0, 0.0, 1.0, 0.70);
-                theme.title_bar = hsla(0.0, 0.0, 1.0, 0.68);
-                theme.title_bar_border = hsla(0.0, 0.0, 0.0, 0.08);
+                theme.input = hsla(0.0, 0.0, 1.0, 1.0);
+                theme.title_bar = canvas;
+                theme.title_bar_border = hsla(0.0, 0.0, 0.0, 0.06);
+                theme.accent = hsla(0.0, 0.0, 0.0, 0.05);
+                theme.accent_foreground = ink;
+                theme.list_hover = hsla(0.0, 0.0, 0.0, 0.04);
+                theme.list_active = hsla(0.0, 0.0, 0.0, 0.06);
+                theme.group_box = hsla(0.0, 0.0, 1.0, 1.0);
+                theme.group_box_foreground = ink;
+                let secondary = hsla(240.0 / 360.0, 0.08, 0.95, 1.0);
+                let secondary_hover = hsla(240.0 / 360.0, 0.06, 0.92, 1.0);
+                let secondary_active = hsla(240.0 / 360.0, 0.04, 0.88, 1.0);
+                theme.secondary = secondary;
+                theme.secondary_hover = secondary_hover;
+                theme.secondary_active = secondary_active;
+                theme.secondary_foreground = ink;
+                theme.button_secondary = secondary;
+                theme.button_secondary_hover = secondary_hover;
+                theme.button_secondary_active = secondary_active;
+                theme.button_secondary_foreground = ink;
+                theme.button_primary = ink;
+                theme.button_primary_hover = hsla(240.0 / 360.0, 0.02, 0.20, 1.0);
+                theme.button_primary_active = hsla(0.0, 0.0, 0.0, 1.0);
+                theme.button_primary_foreground = hsla(0.0, 0.0, 1.0, 1.0);
+                theme.primary_foreground = hsla(0.0, 0.0, 1.0, 1.0);
+                theme.skeleton = hsla(240.0 / 360.0, 0.06, 0.90, 1.0);
+                theme.progress_bar = primary;
             }
         });
     }

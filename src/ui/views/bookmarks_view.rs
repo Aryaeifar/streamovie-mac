@@ -1,12 +1,8 @@
 //! Local watchlist.
 
 use gpui_kit::component::{
-    ActiveTheme as _, Icon, IconName, Selectable as _, Sizable as _, StyledExt as _,
+    ActiveTheme as _, IconName, Selectable as _, Sizable as _, StyledExt as _,
     button::{Button, ButtonVariants as _},
-    empty::{
-        Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyMediaVariant,
-        EmptyTitle,
-    },
     h_flex, v_flex,
 };
 use gpui_kit::{
@@ -18,7 +14,7 @@ use crate::{
     app::StreamovieApp,
     i18n::{directional_row, format_count},
     state::{MediaFilterTab, NavSection},
-    ui::components::render_poster_card,
+    ui::components::{empty_state, render_poster_card},
 };
 
 pub fn render_bookmarks_view(app: &StreamovieApp, cx: &mut Context<StreamovieApp>) -> AnyElement {
@@ -41,9 +37,9 @@ pub fn render_bookmarks_view(app: &StreamovieApp, cx: &mut Context<StreamovieApp
 
     v_flex()
         .w_full()
-        .px(px(24.))
-        .pt(px(20.))
-        .pb(px(40.))
+        .px(px(32.))
+        .pt(px(24.))
+        .pb(px(48.))
         .gap_5()
         .child(
             directional_row(h_flex(), rtl)
@@ -104,33 +100,27 @@ pub fn render_bookmarks_view(app: &StreamovieApp, cx: &mut Context<StreamovieApp
                 )),
         )
         .child(if cards.is_empty() {
-            Empty::new()
-                .header(
-                    EmptyHeader::new()
-                        .media(
-                            EmptyMedia::new()
-                                .with_variant(EmptyMediaVariant::Icon)
-                                .child(Icon::new(IconName::BookOpen)),
-                        )
-                        .title(EmptyTitle::new().child(dict.bookmarks.empty_title))
-                        .description(EmptyDescription::new().child(dict.bookmarks.empty_body)),
-                )
-                .content(
-                    EmptyContent::new().child(
-                        Button::new("watchlist-browse")
-                            .primary()
-                            .label(dict.actions.browse)
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.select_section(NavSection::Home, cx);
-                            })),
-                    ),
-                )
-                .into_any_element()
+            empty_state(
+                IconName::BookOpen,
+                dict.bookmarks.empty_title,
+                dict.bookmarks.empty_body,
+                Some(
+                    Button::new("watchlist-browse")
+                        .primary()
+                        .rounded(px(13.))
+                        .label(dict.actions.browse)
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.select_section(NavSection::Home, cx);
+                        }))
+                        .into_any_element(),
+                ),
+                cx,
+            )
         } else {
             h_flex()
                 .flex_wrap()
-                .gap(px(16.))
-                .py(px(8.))
+                .gap(px(22.))
+                .py(px(12.))
                 .when(rtl, |row| row.flex_row_reverse())
                 .children(cards)
                 .into_any_element()
@@ -147,9 +137,10 @@ fn tab_button(
 ) -> impl IntoElement {
     Button::new(id)
         .small()
+        .rounded(px(13.))
         .selected(selected == tab)
         .when(selected == tab, |btn| btn.primary())
-        .when(selected != tab, |btn| btn.outline())
+        .when(selected != tab, |btn| btn.secondary())
         .label(label)
         .on_click(cx.listener(move |this, _, _, cx| {
             this.set_bookmarks_filter_tab(tab, cx);

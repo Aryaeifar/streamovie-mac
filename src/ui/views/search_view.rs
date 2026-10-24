@@ -2,12 +2,9 @@
 
 use gpui_kit::component::{
     ActiveTheme as _, Icon, IconName, Selectable as _, Sizable as _, StyledExt as _,
-    alert::Alert,
     button::{Button, ButtonVariants as _},
-    empty::{Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyMediaVariant, EmptyTitle},
     h_flex,
     input::Input,
-    spinner::Spinner,
     v_flex,
 };
 use gpui_kit::{
@@ -19,7 +16,7 @@ use crate::{
     app::StreamovieApp,
     i18n::{directional_row, format_count},
     state::MediaFilterTab,
-    ui::components::render_poster_card,
+    ui::components::{empty_state, network_error_state, render_poster_card, skeleton_grid},
 };
 
 pub fn render_search_view(app: &StreamovieApp, cx: &mut Context<StreamovieApp>) -> AnyElement {
@@ -52,9 +49,9 @@ pub fn render_search_view(app: &StreamovieApp, cx: &mut Context<StreamovieApp>) 
 
     v_flex()
         .w_full()
-        .px(px(24.))
-        .pt(px(20.))
-        .pb(px(40.))
+        .px(px(32.))
+        .pt(px(24.))
+        .pb(px(48.))
         .gap_6()
         .child(
             v_flex()
@@ -109,41 +106,32 @@ pub fn render_search_view(app: &StreamovieApp, cx: &mut Context<StreamovieApp>) 
                 .child(dict.search.hint)
                 .into_any_element()
         } else if search.loading {
-            directional_row(h_flex(), rtl)
-                .gap_2()
-                .items_center()
-                .child(Spinner::new().small())
-                .child(
-                    div()
-                        .text_sm()
-                        .text_color(cx.theme().muted_foreground)
-                        .child(dict.search.searching),
-                )
-                .into_any_element()
+            skeleton_grid(8, rtl)
         } else if let Some(err) = search.error.clone() {
-            v_flex()
-                .gap_3()
-                .child(Alert::error("search-error", err).title(dict.search.failed))
-                .child(
+            network_error_state(
+                dict.common.network_title,
+                dict.search.failed,
+                dict.common.network_body,
+                Some(err),
+                Some(
                     Button::new("search-retry")
-                        .outline()
+                        .primary()
+                        .rounded(px(13.))
+                        .icon(IconName::RefreshCw)
                         .label(dict.actions.retry)
-                        .on_click(cx.listener(|this, _, _, cx| this.trigger_search_now(cx))),
-                )
-                .into_any_element()
+                        .on_click(cx.listener(|this, _, _, cx| this.trigger_search_now(cx)))
+                        .into_any_element(),
+                ),
+                cx,
+            )
         } else if cards.is_empty() {
-            Empty::new()
-                .header(
-                    EmptyHeader::new()
-                        .media(
-                            EmptyMedia::new()
-                                .with_variant(EmptyMediaVariant::Icon)
-                                .child(Icon::new(IconName::Search)),
-                        )
-                        .title(EmptyTitle::new().child(dict.search.empty))
-                        .description(EmptyDescription::new().child(dict.search.hint)),
-                )
-                .into_any_element()
+            empty_state(
+                IconName::Search,
+                dict.search.empty,
+                dict.search.hint,
+                None,
+                cx,
+            )
         } else {
             v_flex()
                 .gap_4()
@@ -156,8 +144,8 @@ pub fn render_search_view(app: &StreamovieApp, cx: &mut Context<StreamovieApp>) 
                 .child(
                     h_flex()
                         .flex_wrap()
-                        .gap(px(16.))
-                        .py(px(8.))
+                        .gap(px(22.))
+                        .py(px(12.))
                         .when(rtl, |row| row.flex_row_reverse())
                         .children(cards),
                 )
@@ -176,9 +164,10 @@ fn filter_button(
 ) -> impl IntoElement {
     Button::new(id)
         .small()
+        .rounded(px(13.))
         .selected(selected == tab)
         .when(selected == tab, |btn| btn.primary())
-        .when(selected != tab, |btn| btn.outline())
+        .when(selected != tab, |btn| btn.secondary())
         .label(label)
         .on_click(cx.listener(move |this, _, _, cx| {
             this.set_search_filter_tab(tab, cx);

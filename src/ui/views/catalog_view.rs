@@ -1,14 +1,9 @@
 //! Movies and series browsing.
 
 use gpui_kit::component::{
-    ActiveTheme as _, Icon, IconName, Selectable as _, Sizable as _, StyledExt as _,
-    alert::Alert,
+    ActiveTheme as _, IconName, Selectable as _, Sizable as _, StyledExt as _,
     button::{Button, ButtonVariants as _},
-    empty::{Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyMediaVariant, EmptyTitle},
-    h_flex,
-    skeleton::Skeleton,
-    spinner::Spinner,
-    v_flex,
+    h_flex, v_flex,
 };
 use gpui_kit::{
     AnyElement, Context, IntoElement, ParentElement as _, SharedString, Styled as _, div,
@@ -19,7 +14,10 @@ use crate::{
     app::StreamovieApp,
     i18n::{directional_row, format_count},
     models::{BrowseSort, MediaCategory},
-    ui::components::render_poster_card,
+    ui::components::{
+        PosterCardStyle, empty_state, network_error_state, render_poster_card, skeleton_card,
+        skeleton_grid,
+    },
 };
 
 pub fn render_catalog_view(
@@ -50,9 +48,10 @@ pub fn render_catalog_view(
             category.as_str()
         )))
         .small()
+        .rounded(px(13.))
         .selected(active_genre == 0)
         .when(active_genre == 0, |btn| btn.primary())
-        .when(active_genre != 0, |btn| btn.outline())
+        .when(active_genre != 0, |btn| btn.secondary())
         .label(dict.browse.all_genres)
         .on_click(cx.listener(move |this, _, _, cx| {
             this.set_catalog_genre(category, 0, cx);
@@ -68,9 +67,10 @@ pub fn render_catalog_view(
                 gid
             )))
             .small()
+            .rounded(px(13.))
             .selected(selected)
             .when(selected, |btn| btn.primary())
-            .when(!selected, |btn| btn.outline())
+            .when(!selected, |btn| btn.secondary())
             .label(genre.display_name())
             .on_click(cx.listener(move |this, _, _, cx| {
                 this.set_catalog_genre(category, gid, cx);
@@ -96,9 +96,9 @@ pub fn render_catalog_view(
 
     v_flex()
         .w_full()
-        .px(px(24.))
-        .pt(px(20.))
-        .pb(px(40.))
+        .px(px(32.))
+        .pt(px(24.))
+        .pb(px(48.))
         .gap_5()
         .child(
             directional_row(h_flex(), rtl)
@@ -135,9 +135,10 @@ pub fn render_catalog_view(
                         category.as_str()
                     )))
                     .small()
+                    .rounded(px(13.))
                     .selected(state.sort == BrowseSort::Created)
                     .when(state.sort == BrowseSort::Created, |btn| btn.primary())
-                    .when(state.sort != BrowseSort::Created, |btn| btn.outline())
+                    .when(state.sort != BrowseSort::Created, |btn| btn.secondary())
                     .label(dict.browse.sort_latest)
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.set_catalog_sort(category, BrowseSort::Created, cx);
@@ -149,9 +150,10 @@ pub fn render_catalog_view(
                         category.as_str()
                     )))
                     .small()
+                    .rounded(px(13.))
                     .selected(state.sort == BrowseSort::Imdb)
                     .when(state.sort == BrowseSort::Imdb, |btn| btn.primary())
-                    .when(state.sort != BrowseSort::Imdb, |btn| btn.outline())
+                    .when(state.sort != BrowseSort::Imdb, |btn| btn.secondary())
                     .label(dict.browse.sort_imdb)
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.set_catalog_sort(category, BrowseSort::Imdb, cx);
@@ -160,100 +162,82 @@ pub fn render_catalog_view(
                 .children(genre_buttons),
         )
         .child(if state.loading && state.items.is_empty() {
-            h_flex()
-                .gap_4()
-                .flex_wrap()
-                .children((0..8).map(|_| {
-                    Skeleton::new()
-                        .w(px(168.))
-                        .h(px(252.))
-                        .rounded(px(10.))
-                        .into_any_element()
-                }))
-                .into_any_element()
+            skeleton_grid(8, rtl)
         } else if let Some(err) = state.error.clone().filter(|_| state.items.is_empty()) {
-            v_flex()
-                .gap_3()
-                .child(Alert::error("catalog-error", err).title(dict.browse.load_error))
-                .child(
-                    Button::new("catalog-retry")
-                        .outline()
-                        .icon(IconName::RefreshCw)
-                        .label(dict.actions.retry)
-                        .on_click(cx.listener(move |this, _, _, cx| {
-                            this.reload_catalog(category, cx);
-                        })),
-                )
-                .into_any_element()
+            let failed_title = match category {
+                MediaCategory::Movie => dict.common.movies_failed,
+                MediaCategory::Series => dict.common.series_failed,
+            };
+            network_error_state(
+                dict.common.network_title,
+                failed_title,
+                dict.common.network_body,
+                Some(err),
+                Some(
+                    Button::new(SharedString::from(format!(
+                        "catalog-retry-{}",
+                        category.as_str()
+                    )))
+                    .primary()
+                    .rounded(px(13.))
+                    .icon(IconName::RefreshCw)
+                    .label(dict.actions.retry)
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.reload_catalog(category, cx);
+                    }))
+                    .into_any_element(),
+                ),
+                cx,
+            )
         } else if cards.is_empty() {
-            Empty::new()
-                .header(
-                    EmptyHeader::new()
-                        .media(
-                            EmptyMedia::new()
-                                .with_variant(EmptyMediaVariant::Icon)
-                                .child(Icon::new(IconName::Search)),
-                        )
-                        .title(EmptyTitle::new().child(dict.browse.empty))
-                        .description(EmptyDescription::new().child(dict.browse.empty_hint)),
-                )
-                .into_any_element()
+            empty_state(
+                IconName::Inbox,
+                dict.browse.empty,
+                dict.browse.empty_hint,
+                None,
+                cx,
+            )
         } else {
+            let failed_title = match category {
+                MediaCategory::Movie => dict.common.movies_failed,
+                MediaCategory::Series => dict.common.series_failed,
+            };
+            let page_error = state.error.clone();
             v_flex()
                 .gap_6()
                 .child(
                     h_flex()
                         .flex_wrap()
-                        .gap(px(16.))
-                        .py(px(8.))
+                        .gap(px(22.))
+                        .py(px(12.))
                         .when(rtl, |row| row.flex_row_reverse())
-                        .children(cards),
+                        .children(cards)
+                        .when(state.loading_more, |row| {
+                            row.children((0..4).map(|_| skeleton_card(PosterCardStyle::Poster)))
+                        }),
                 )
-                .when(state.loading_more, |col| {
-                    col.child(
-                        directional_row(h_flex(), rtl)
-                            .w_full()
-                            .justify_center()
-                            .gap_2()
-                            .py(px(8.))
-                            .child(Spinner::new().small())
-                            .child(
-                                div()
-                                    .text_size(px(13.))
-                                    .text_color(cx.theme().muted_foreground)
-                                    .child(dict.browse.loading_more),
-                            ),
-                    )
-                })
-                .when(state.error.is_some(), |col| {
-                    let message = state.error.clone().unwrap_or_default();
-                    col.child(
-                        directional_row(h_flex(), rtl)
-                            .w_full()
-                            .justify_center()
-                            .gap_3()
-                            .items_center()
-                            .child(
-                                div()
-                                    .text_size(px(13.))
-                                    .text_color(cx.theme().muted_foreground)
-                                    .child(message),
-                            )
-                            .child(
-                                Button::new(SharedString::from(format!(
-                                    "load-more-retry-{}",
-                                    category.as_str()
-                                )))
-                                .small()
-                                .outline()
-                                .label(dict.actions.retry)
-                                .on_click(cx.listener(
-                                    move |this, _, _, cx| {
-                                        this.load_more_catalog(category, cx);
-                                    },
-                                )),
-                            ),
-                    )
+                .when_some(page_error, |col, message| {
+                    col.child(network_error_state(
+                        dict.common.network_title,
+                        failed_title,
+                        dict.common.network_body,
+                        Some(message),
+                        Some(
+                            Button::new(SharedString::from(format!(
+                                "load-more-retry-{}",
+                                category.as_str()
+                            )))
+                            .primary()
+                            .rounded(px(13.))
+                            .icon(IconName::RefreshCw)
+                            .label(dict.actions.retry)
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                this.load_more_catalog(category, cx);
+                            }))
+                            .into_any_element(),
+                        ),
+                        cx,
+                    ))
                 })
                 .into_any_element()
         })

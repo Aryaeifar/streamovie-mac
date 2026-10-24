@@ -81,12 +81,31 @@ impl Locale {
         }
     }
 
-    /// Preferred font family for this locale on macOS.
+    /// Vazirmatn for Persian and for left-to-right English.
+    /// The family is bundled and registered in [`install_fonts`].
     pub fn font_family(self) -> SharedString {
         match self {
-            Self::En => ".SystemUIFont".into(),
-            Self::Fa => "Geeza Pro".into(),
+            Self::En | Self::Fa => "Vazirmatn".into(),
         }
+    }
+}
+
+/// Registers the bundled Vazirmatn faces so Persian and Latin text share one family.
+pub fn install_fonts(cx: &gpui_kit::App) {
+    use std::borrow::Cow;
+
+    let faces: [&'static [u8]; 4] = [
+        include_bytes!("../../assets/fonts/Vazirmatn-Regular.ttf"),
+        include_bytes!("../../assets/fonts/Vazirmatn-Medium.ttf"),
+        include_bytes!("../../assets/fonts/Vazirmatn-SemiBold.ttf"),
+        include_bytes!("../../assets/fonts/Vazirmatn-Bold.ttf"),
+    ];
+    let fonts = faces
+        .into_iter()
+        .map(|bytes| Cow::Borrowed(bytes))
+        .collect();
+    if let Err(err) = cx.text_system().add_fonts(fonts) {
+        tracing::error!("failed to load Vazirmatn: {err:#}");
     }
 }
 

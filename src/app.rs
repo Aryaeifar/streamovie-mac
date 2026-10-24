@@ -1,21 +1,19 @@
 //! Root GPUI application view for Streamovie.
 
-use std::sync::Arc;
 use std::time::Duration;
 
 use gpui_kit::component::{
     ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt as _, TitleBar, WindowExt as _,
-    button::{Button, ButtonVariants as _},
     h_flex,
     input::{Input, InputEvent, InputState},
     scroll::ScrollableElement as _,
     v_flex,
 };
 use gpui_kit::{
-    AnyElement, App, AppContext as _, BoxShadow, Context, Entity, Image, InteractiveElement as _,
+    AnyElement, App, AppContext as _, BoxShadow, Context, Entity, InteractiveElement as _,
     IntoElement, ParentElement as _, Pixels, Render, ScrollHandle, SharedString,
-    StatefulInteractiveElement as _, Styled as _, Subscription, Window, div, hsla, point,
-    prelude::FluentBuilder as _, px,
+    StatefulInteractiveElement as _, Styled as _, Subscription, Window, div, hsla,
+    linear_color_stop, linear_gradient, point, prelude::FluentBuilder as _, px, relative, white,
 };
 
 use crate::{
@@ -38,7 +36,7 @@ use crate::{
     },
     ui::{
         components::render_player_view,
-        image_cache::ImageCache,
+        image_cache::{ImageCache, ImageStatus},
         views::{
             render_bookmarks_view, render_catalog_view, render_details_view, render_home_view,
             render_search_view, render_settings_view,
@@ -96,6 +94,8 @@ pub struct StreamovieApp {
     download_polling: bool,
     player_polling: bool,
     hovered_card: Option<SharedString>,
+    hovered_control: Option<SharedString>,
+    pressed_control: Option<SharedString>,
     rail_drag: Option<RailDrag>,
     rail_drag_moved: bool,
 
@@ -192,6 +192,8 @@ impl StreamovieApp {
             download_polling: false,
             player_polling: false,
             hovered_card: None,
+            hovered_control: None,
+            pressed_control: None,
             rail_drag: None,
             rail_drag_moved: false,
             _subscriptions: vec![search_sub],
@@ -255,6 +257,55 @@ impl StreamovieApp {
         cx.notify();
     }
 
+    pub fn control_is_hovered(&self, id: &SharedString) -> bool {
+        self.hovered_control.as_ref() == Some(id)
+    }
+
+    pub fn control_is_pressed(&self, id: &SharedString) -> bool {
+        self.pressed_control.as_ref() == Some(id)
+    }
+
+    pub fn set_control_hovered(
+        &mut self,
+        id: &SharedString,
+        hovered: bool,
+        cx: &mut Context<Self>,
+    ) {
+        if hovered {
+            if self.hovered_control.as_ref() == Some(id) {
+                return;
+            }
+            self.hovered_control = Some(id.clone());
+        } else if self.hovered_control.as_ref() == Some(id) {
+            self.hovered_control = None;
+            if self.pressed_control.as_ref() == Some(id) {
+                self.pressed_control = None;
+            }
+        } else {
+            return;
+        }
+        cx.notify();
+    }
+
+    pub fn set_control_pressed(
+        &mut self,
+        id: &SharedString,
+        pressed: bool,
+        cx: &mut Context<Self>,
+    ) {
+        if pressed {
+            if self.pressed_control.as_ref() == Some(id) {
+                return;
+            }
+            self.pressed_control = Some(id.clone());
+        } else if self.pressed_control.as_ref() == Some(id) {
+            self.pressed_control = None;
+        } else {
+            return;
+        }
+        cx.notify();
+    }
+
     pub fn scroll_home_row(&mut self, index: usize, direction: isize, cx: &mut Context<Self>) {
         let handle =
             &self.home_row_scroll_handles[index.min(self.home_row_scroll_handles.len() - 1)];
@@ -305,13 +356,13 @@ impl StreamovieApp {
         self.rail_drag = None;
     }
 
-    pub fn resolve_image(
+    pub(crate) fn image_status(
         &self,
         primary_url: &str,
         fallback_url: Option<&str>,
         cx: &mut Context<Self>,
-    ) -> Option<Arc<Image>> {
-        self.image_cache.get_or_load(primary_url, fallback_url, cx)
+    ) -> ImageStatus {
+        self.image_cache.status(primary_url, fallback_url, cx)
     }
 
     pub fn catalog_state(&self, category: MediaCategory) -> &CatalogGridState {
@@ -486,42 +537,101 @@ impl StreamovieApp {
 
     // --- Async Data Fetching (Streamovie Catalog + OMDb) ---
 
+    pub fn retry_active_seasons(&mut self, cx: &mut Context<Self>) {
+        let Some(details) = self.active_details.as_ref() else {
+            return;
+        };
+        if details.category != MediaCategory::Series {
+            return;
+        }
+        let media_id = details.media.id;
+        self.load_seasons(media_id, cx);
+    }
+
+    fn load_seasons(&mut self, media_id: u64, cx: &mut Context<Self>) {
+        if let Some(details) = self.active_details.as_mut() {
+            if details.media.id == media_id {
+                details.seasons_loading = true;
+                details.seasons_error = None;
+            }
+        }
+        cx.notify();
+
+        let streamovie_client = self.streamovie_api.clone();
+        cx.spawn(async move |this, cx| {
+            let seasons_res = cx
+                .background_executor()
+                .spawn(async move { streamovie_client.fetch_seasons(media_id) })
+                .await;
+
+            let _ = this.update(cx, |this, cx| {
+                let Some(details) = this.active_details.as_mut() else {
+                    return;
+                };
+                if details.media.id != media_id {
+                    return;
+                }
+                details.seasons_loading = false;
+                match seasons_res {
+                    Ok(seasons) => {
+                        details.seasons = seasons;
+                        details.seasons_error = None;
+                    }
+                    Err(err) => {
+                        details.seasons_error = Some(err.to_string());
+                    }
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
     pub fn reload_home_feeds(&mut self, cx: &mut Context<Self>) {
         self.home.loading = true;
-        self.home.error = None;
+        self.home.latest_movies_error = None;
+        self.home.latest_series_error = None;
+        self.home.imdb_movies_error = None;
+        self.home.imdb_series_error = None;
         cx.notify();
 
         let client = self.streamovie_api.clone();
         cx.spawn(async move |this, cx| {
-            let result = cx
+            let feeds = cx
                 .background_executor()
                 .spawn(async move {
-                    let latest_movies = client.fetch_movies(0, 0, BrowseSort::Created)?;
-                    let latest_series = client.fetch_series(0, 0, BrowseSort::Created)?;
-                    let imdb_movies = client
-                        .fetch_movies(0, 32, BrowseSort::Imdb)
-                        .unwrap_or_default();
-                    let imdb_series = client
-                        .fetch_series(0, 32, BrowseSort::Imdb)
-                        .unwrap_or_default();
-                    Ok::<_, anyhow::Error>((latest_movies, latest_series, imdb_movies, imdb_series))
+                    (
+                        client.fetch_movies(0, 0, BrowseSort::Created),
+                        client.fetch_series(0, 0, BrowseSort::Created),
+                        client.fetch_movies(0, 32, BrowseSort::Imdb),
+                        client.fetch_series(0, 32, BrowseSort::Imdb),
+                    )
                 })
                 .await;
 
             let _ = this.update(cx, |this, cx| {
                 this.home.loading = false;
-                match result {
-                    Ok((latest_movies, latest_series, imdb_movies, imdb_series)) => {
-                        this.home.latest_movies = latest_movies;
-                        this.home.latest_series = latest_series;
-                        this.home.imdb_movies = imdb_movies;
-                        this.home.imdb_series = imdb_series;
-                        this.home.error = None;
-                    }
-                    Err(err) => {
-                        this.home.error = Some(err.to_string());
-                    }
-                }
+                let (latest_movies, latest_series, imdb_movies, imdb_series) = feeds;
+                apply_home_feed(
+                    &mut this.home.latest_movies,
+                    &mut this.home.latest_movies_error,
+                    latest_movies,
+                );
+                apply_home_feed(
+                    &mut this.home.latest_series,
+                    &mut this.home.latest_series_error,
+                    latest_series,
+                );
+                apply_home_feed(
+                    &mut this.home.imdb_movies,
+                    &mut this.home.imdb_movies_error,
+                    imdb_movies,
+                );
+                apply_home_feed(
+                    &mut this.home.imdb_series,
+                    &mut this.home.imdb_series_error,
+                    imdb_series,
+                );
                 cx.notify();
             });
         })
@@ -811,34 +921,7 @@ impl StreamovieApp {
 
         // 2. If series, fetch Streamovie seasons & episodes + Season 1 OMDb guide
         if category == MediaCategory::Series {
-            let streamovie_client = self.streamovie_api.clone();
-            cx.spawn(async move |this, cx| {
-                let seasons_res = cx
-                    .background_executor()
-                    .spawn(async move { streamovie_client.fetch_seasons(media_id) })
-                    .await;
-
-                let _ = this.update(cx, |this, cx| {
-                    let Some(details) = this.active_details.as_mut() else {
-                        return;
-                    };
-                    if details.media.id != media_id {
-                        return;
-                    }
-                    details.seasons_loading = false;
-                    match seasons_res {
-                        Ok(seasons) => {
-                            details.seasons = seasons;
-                        }
-                        Err(err) => {
-                            details.seasons_error = Some(err.to_string());
-                        }
-                    }
-                    cx.notify();
-                });
-            })
-            .detach();
-
+            self.load_seasons(media_id, cx);
             self.fetch_omdb_season_guide(media_id, lookup_title, 1, year, imdb_id, cx);
         }
     }
@@ -1178,22 +1261,32 @@ impl StreamovieApp {
             self.playback.is_none() && self.active_details.is_none() && self.section == item;
         let label = item.label(dict);
         let row_id = SharedString::from(format!("nav-{label}"));
+        let dark = cx.theme().is_dark();
         let icon_color = if is_active {
-            cx.theme().primary
+            if dark {
+                cx.theme().primary
+            } else {
+                cx.theme().foreground
+            }
         } else {
             cx.theme().muted_foreground
+        };
+        let active_fill = if dark {
+            cx.theme().primary.opacity(0.16)
+        } else {
+            hsla(0.0, 0.0, 0.0, 0.06)
         };
 
         directional_row(h_flex(), rtl)
             .id(row_id)
             .w_full()
-            .h(px(32.))
-            .px(px(8.))
+            .h(px(36.))
+            .px(px(10.))
             .gap(px(8.))
-            .rounded(px(8.))
+            .rounded(px(10.))
             .items_center()
             .cursor_pointer()
-            .when(is_active, |row| row.bg(cx.theme().primary.opacity(0.16)))
+            .when(is_active, |row| row.bg(active_fill))
             .child(Icon::new(item.icon()).small().text_color(icon_color))
             .child(
                 div()
@@ -1212,7 +1305,6 @@ impl StreamovieApp {
 
     fn render_sidebar(&self, cx: &mut Context<Self>) -> AnyElement {
         let locale = self.locale();
-        let rtl = locale.is_rtl();
         let library = [
             NavSection::Home,
             NavSection::Movies,
@@ -1221,34 +1313,63 @@ impl StreamovieApp {
             NavSection::Bookmarks,
         ];
 
-        v_flex()
-            .w(px(220.))
+        let dark = cx.theme().is_dark();
+        let (fill, stroke, sheen) = liquid_glass(dark);
+
+        div()
             .h_full()
+            .p(px(12.))
             .flex_shrink_0()
-            .bg(cx.theme().sidebar)
-            .border_color(cx.theme().border)
-            .when(!rtl, |col| col.border_r_1())
-            .when(rtl, |col| col.border_l_1())
-            .px(px(10.))
-            .pt(px(8.))
-            .pb(px(12.))
-            .justify_between()
             .child(
                 v_flex()
-                    .gap(px(2.))
+                    .relative()
+                    .w(px(212.))
+                    .h_full()
+                    .rounded(px(24.))
+                    .overflow_hidden()
+                    .bg(fill)
+                    .border_1()
+                    .border_color(stroke)
+                    .shadow(liquid_shadow(dark))
+                    .px(px(10.))
+                    .pt(px(8.))
+                    .pb(px(12.))
+                    .justify_between()
                     .child(
                         div()
-                            .px(px(8.))
-                            .pt(px(6.))
-                            .pb(px(6.))
-                            .text_size(px(11.))
-                            .font_semibold()
-                            .text_color(cx.theme().muted_foreground)
-                            .child(locale.dict().nav.library),
+                            .absolute()
+                            .top_0()
+                            .left_0()
+                            .right_0()
+                            .h(px(72.))
+                            .bg(sheen),
                     )
-                    .children(library.map(|item| self.render_nav_row(item, cx))),
+                    .child(
+                        div()
+                            .absolute()
+                            .top_0()
+                            .left(px(16.))
+                            .right(px(16.))
+                            .h(px(1.))
+                            .bg(white().opacity(if dark { 0.55 } else { 0.9 })),
+                    )
+                    .child(
+                        v_flex()
+                            .gap(px(2.))
+                            .child(
+                                div()
+                                    .px(px(8.))
+                                    .pt(px(6.))
+                                    .pb(px(6.))
+                                    .text_size(px(11.))
+                                    .font_semibold()
+                                    .text_color(cx.theme().muted_foreground)
+                                    .child(locale.dict().nav.library),
+                            )
+                            .children(library.map(|item| self.render_nav_row(item, cx))),
+                    )
+                    .child(self.render_nav_row(NavSection::Settings, cx)),
             )
-            .child(self.render_nav_row(NavSection::Settings, cx))
             .into_any_element()
     }
 
@@ -1257,20 +1378,16 @@ impl StreamovieApp {
         let dict = locale.dict();
         let rtl = locale.is_rtl();
         let dark = cx.theme().is_dark();
-        let fill = if dark {
-            hsla(240.0 / 360.0, 0.08, 0.20, 0.55)
+        let (fill, stroke, sheen) = liquid_glass(dark);
+        let lens = if dark {
+            hsla(0.0, 0.0, 1.0, 0.10)
         } else {
-            hsla(0.0, 0.0, 1.0, 0.62)
+            hsla(240.0 / 360.0, 0.08, 0.95, 1.0)
         };
-        let stroke = if dark {
-            hsla(0.0, 0.0, 1.0, 0.14)
+        let lens_stroke = if dark {
+            hsla(0.0, 0.0, 1.0, 0.22)
         } else {
-            hsla(0.0, 0.0, 0.0, 0.08)
-        };
-        let highlight = if dark {
-            hsla(0.0, 0.0, 1.0, 0.28)
-        } else {
-            hsla(0.0, 0.0, 1.0, 0.90)
+            hsla(0.0, 0.0, 0.0, 0.06)
         };
         let title = match self.section {
             NavSection::Home => dict.nav.home,
@@ -1287,75 +1404,118 @@ impl StreamovieApp {
         };
 
         div()
-            .relative()
             .w_full()
             .flex_shrink_0()
+            .px(px(16.))
+            .pt(px(12.))
+            .pb(px(4.))
             .child(
-                directional_row(h_flex(), rtl)
+                div()
+                    .relative()
                     .w_full()
-                    .h(px(56.))
-                    .px(px(16.))
-                    .items_center()
-                    .justify_between()
-                    .gap(px(16.))
+                    .h(px(48.))
+                    .rounded(px(16.))
+                    .overflow_hidden()
                     .bg(fill)
-                    .border_b_1()
+                    .border_1()
                     .border_color(stroke)
-                    .shadow(vec![BoxShadow {
-                        offset: point(px(0.), px(10.)),
-                        blur_radius: px(28.),
-                        spread_radius: px(-12.),
-                        inset: false,
-                        color: hsla(0.0, 0.0, 0.0, if dark { 0.35 } else { 0.08 }),
-                    }])
+                    .shadow(liquid_shadow(dark))
+                    .child(div().absolute().inset_0().rounded(px(16.)).bg(sheen))
                     .child(
                         div()
-                            .flex_shrink_0()
-                            .text_size(px(17.))
-                            .font_semibold()
-                            .text_color(cx.theme().foreground)
-                            .child(title),
+                            .absolute()
+                            .top(px(1.))
+                            .left(px(22.))
+                            .right(px(22.))
+                            .h(px(1.))
+                            .bg(white().opacity(if dark { 0.62 } else { 0.95 })),
                     )
                     .child(
                         directional_row(h_flex(), rtl)
-                            .gap(px(8.))
+                            .absolute()
+                            .inset_0()
+                            .px(px(16.))
                             .items_center()
-                            .child(glass_search(self, fill, stroke, cx))
-                            .child(glass_chip(
-                                "toolbar-locale",
-                                Some(locale.short_badge()),
-                                None,
-                                None,
-                                fill,
-                                stroke,
-                                cx.listener(|this, _, window, cx| {
-                                    this.toggle_locale(Some(window), cx);
-                                }),
-                            ))
-                            .child(glass_chip(
-                                "toolbar-theme",
-                                None,
-                                Some(mode_icon),
-                                Some(self.settings.theme_mode.label(dict)),
-                                fill,
-                                stroke,
-                                cx.listener(|this, _, window, cx| {
-                                    this.cycle_theme_mode(Some(window), cx);
-                                }),
-                            )),
+                            .justify_between()
+                            .gap(px(16.))
+                            .child(
+                                div()
+                                    .flex_shrink_0()
+                                    .text_size(px(17.))
+                                    .font_semibold()
+                                    .text_color(cx.theme().foreground)
+                                    .child(title),
+                            )
+                            .child(
+                                directional_row(h_flex(), rtl)
+                                    .gap(px(8.))
+                                    .items_center()
+                                    .child(glass_search(self, lens, lens_stroke, cx))
+                                    .child(glass_chip(
+                                        "toolbar-locale",
+                                        Some(locale.short_badge()),
+                                        None,
+                                        lens,
+                                        lens_stroke,
+                                        cx.theme().foreground,
+                                        cx.listener(|this, _, window, cx| {
+                                            this.toggle_locale(Some(window), cx);
+                                        }),
+                                    ))
+                                    .child(glass_chip(
+                                        "toolbar-theme",
+                                        None,
+                                        Some(mode_icon),
+                                        lens,
+                                        lens_stroke,
+                                        cx.theme().foreground,
+                                        cx.listener(|this, _, window, cx| {
+                                            this.cycle_theme_mode(Some(window), cx);
+                                        }),
+                                    )),
+                            ),
                     ),
-            )
-            .child(
-                div()
-                    .absolute()
-                    .top_0()
-                    .left_0()
-                    .right_0()
-                    .h(px(1.))
-                    .bg(highlight),
             )
             .into_any_element()
     }
+}
+
+fn liquid_glass(dark: bool) -> (gpui_kit::Hsla, gpui_kit::Hsla, gpui_kit::Background) {
+    let fill = if dark {
+        hsla(240.0 / 360.0, 0.08, 0.46, 0.28)
+    } else {
+        hsla(0.0, 0.0, 1.0, 0.86)
+    };
+    let stroke = if dark {
+        hsla(0.0, 0.0, 1.0, 0.22)
+    } else {
+        hsla(0.0, 0.0, 0.0, 0.08)
+    };
+    let sheen = linear_gradient(
+        180.,
+        linear_color_stop(white().opacity(if dark { 0.16 } else { 0.72 }), 0.),
+        linear_color_stop(white().opacity(0.0), 1.),
+    );
+    (fill, stroke, sheen.into())
+}
+
+fn liquid_shadow(dark: bool) -> Vec<BoxShadow> {
+    vec![
+        BoxShadow {
+            offset: point(px(0.), px(1.)),
+            blur_radius: px(0.),
+            spread_radius: px(0.),
+            inset: true,
+            color: white().opacity(if dark { 0.28 } else { 0.8 }),
+        },
+        BoxShadow {
+            offset: point(px(0.), px(16.)),
+            blur_radius: px(40.),
+            spread_radius: px(-16.),
+            inset: false,
+            color: hsla(0.0, 0.0, 0.0, if dark { 0.45 } else { 0.08 }),
+        },
+    ]
 }
 
 fn glass_search(
@@ -1366,24 +1526,33 @@ fn glass_search(
 ) -> AnyElement {
     directional_row(h_flex(), app.locale().is_rtl())
         .w(px(280.))
-        .h(px(34.))
-        .px(px(10.))
+        .h(px(32.))
+        .px(px(8.))
         .gap(px(6.))
         .items_center()
-        .rounded(px(11.))
+        .flex_shrink_0()
+        .rounded_full()
+        .overflow_hidden()
         .bg(fill)
         .border_1()
         .border_color(stroke)
         .child(
-            Icon::new(IconName::Search)
-                .small()
-                .text_color(cx.theme().muted_foreground),
+            h_flex()
+                .size(px(16.))
+                .flex_shrink_0()
+                .items_center()
+                .justify_center()
+                .child(
+                    Icon::new(IconName::Search)
+                        .small()
+                        .text_color(cx.theme().foreground.opacity(0.62)),
+                ),
         )
         .child(
             div()
                 .flex_1()
                 .min_w_0()
-                .child(Input::new(app.search_input()).cleanable(true)),
+                .child(Input::new(app.search_input()).small().cleanable(true)),
         )
         .into_any_element()
 }
@@ -1392,26 +1561,38 @@ fn glass_chip(
     id: &'static str,
     label: Option<&'static str>,
     icon: Option<IconName>,
-    tooltip: Option<&'static str>,
     fill: gpui_kit::Hsla,
     stroke: gpui_kit::Hsla,
+    fg: gpui_kit::Hsla,
     on_click: impl Fn(&gpui_kit::ClickEvent, &mut Window, &mut gpui_kit::App) + 'static,
 ) -> AnyElement {
-    div()
-        .h(px(34.))
-        .rounded(px(11.))
+    h_flex()
+        .id(id)
+        .h(px(32.))
+        .min_w(px(32.))
+        .px(px(8.))
+        .flex_shrink_0()
+        .rounded_full()
+        .items_center()
+        .justify_center()
+        .cursor_pointer()
         .bg(fill)
         .border_1()
         .border_color(stroke)
-        .child(
-            Button::new(id)
-                .small()
-                .text()
-                .when_some(label, |btn, label| btn.label(label))
-                .when_some(icon, |btn, icon| btn.icon(icon))
-                .when_some(tooltip, |btn, tip| btn.tooltip(tip))
-                .on_click(on_click),
-        )
+        .when_some(icon, |chip, icon| {
+            chip.child(Icon::new(icon).small().text_color(fg))
+        })
+        .when_some(label, |chip, label| {
+            chip.child(
+                div()
+                    .text_size(px(11.))
+                    .font_semibold()
+                    .line_height(relative(1.0))
+                    .text_color(fg)
+                    .child(label),
+            )
+        })
+        .on_click(on_click)
         .into_any_element()
 }
 
@@ -1465,7 +1646,12 @@ impl Render for StreamovieApp {
 
         div()
             .size_full()
-            .bg(cx.theme().background)
+            .font_family(locale.font_family())
+            .bg(if cx.theme().is_dark() {
+                hsla(240.0 / 360.0, 0.02, 0.03, 1.0)
+            } else {
+                cx.theme().background
+            })
             .text_color(cx.theme().foreground)
             .child(
                 v_flex()
@@ -1527,5 +1713,21 @@ impl Render for StreamovieApp {
                             ),
                     ),
             )
+    }
+}
+
+fn apply_home_feed(
+    items: &mut Vec<ApiMedia>,
+    error: &mut Option<String>,
+    result: anyhow::Result<Vec<ApiMedia>>,
+) {
+    match result {
+        Ok(next) => {
+            *items = next;
+            *error = None;
+        }
+        Err(err) => {
+            *error = Some(err.to_string());
+        }
     }
 }
