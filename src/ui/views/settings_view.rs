@@ -15,7 +15,7 @@ use gpui_kit::{
 use crate::{
     app::StreamovieApp,
     i18n::{Locale, directional_row},
-    storage::{AccentPalette, ThemeModePreference},
+    storage::AccentPalette,
 };
 
 pub fn render_settings_view(
@@ -26,24 +26,6 @@ pub fn render_settings_view(
     let dict = locale.dict();
     let rtl = locale.is_rtl();
     let view = cx.entity();
-
-    let mode_options: Vec<(SharedString, SharedString)> = ThemeModePreference::ALL
-        .iter()
-        .map(|mode| (mode.code().into(), mode.label(dict).into()))
-        .collect();
-    let mode_field = {
-        let read = view.clone();
-        let write = view.clone();
-        SettingField::dropdown(
-            mode_options,
-            move |cx: &App| read.read(cx).settings().theme_mode.code().into(),
-            move |val: SharedString, cx: &mut App| {
-                write.update(cx, |this, cx| {
-                    this.set_theme_mode(ThemeModePreference::from_code(val.as_ref()), None, cx);
-                });
-            },
-        )
-    };
 
     let accent_options: Vec<(SharedString, SharedString)> = AccentPalette::ALL
         .iter()
@@ -95,8 +77,6 @@ pub fn render_settings_view(
                 SettingGroup::new()
                     .title(dict.settings.appearance_group)
                     .items(vec![
-                        SettingItem::new(dict.settings.mode_label, mode_field)
-                            .description(dict.settings.mode_description),
                         SettingItem::new(dict.settings.accent_theme, accent_field)
                             .description(dict.settings.accent_description),
                     ]),

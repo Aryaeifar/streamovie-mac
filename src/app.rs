@@ -31,7 +31,7 @@ use crate::{
         NavSection, SearchState,
     },
     storage::{
-        AccentPalette, BookmarkStorage, PersistedSettings, SettingsStorage, ThemeModePreference,
+        AccentPalette, BookmarkStorage, PersistedSettings, SettingsStorage,
         app_data_dir,
     },
     ui::{
@@ -488,27 +488,6 @@ impl StreamovieApp {
     pub fn toggle_locale(&mut self, window: Option<&mut Window>, cx: &mut Context<Self>) {
         let next = self.settings.locale.toggle();
         self.set_locale(next, window, cx);
-    }
-
-    pub fn set_theme_mode(
-        &mut self,
-        mode: ThemeModePreference,
-        window: Option<&mut Window>,
-        cx: &mut Context<Self>,
-    ) {
-        self.settings.theme_mode = mode;
-        self.settings.apply_to_uni_kit(window, cx);
-        let _ = self.settings_storage.save(&self.settings);
-        cx.notify();
-    }
-
-    pub fn cycle_theme_mode(&mut self, window: Option<&mut Window>, cx: &mut Context<Self>) {
-        let next = match self.settings.theme_mode {
-            ThemeModePreference::Dark => ThemeModePreference::Light,
-            ThemeModePreference::Light => ThemeModePreference::System,
-            ThemeModePreference::System => ThemeModePreference::Dark,
-        };
-        self.set_theme_mode(next, window, cx);
     }
 
     pub fn set_accent_palette(
@@ -1261,21 +1240,12 @@ impl StreamovieApp {
             self.playback.is_none() && self.active_details.is_none() && self.section == item;
         let label = item.label(dict);
         let row_id = SharedString::from(format!("nav-{label}"));
-        let dark = cx.theme().is_dark();
         let icon_color = if is_active {
-            if dark {
-                cx.theme().primary
-            } else {
-                cx.theme().foreground
-            }
+            cx.theme().foreground
         } else {
             cx.theme().muted_foreground
         };
-        let active_fill = if dark {
-            cx.theme().primary.opacity(0.16)
-        } else {
-            hsla(0.0, 0.0, 0.0, 0.06)
-        };
+        let active_fill = hsla(0.0, 0.0, 0.0, 0.06);
 
         directional_row(h_flex(), rtl)
             .id(row_id)
@@ -1313,8 +1283,7 @@ impl StreamovieApp {
             NavSection::Bookmarks,
         ];
 
-        let dark = cx.theme().is_dark();
-        let (fill, stroke, sheen) = liquid_glass(dark);
+        let (fill, stroke, sheen) = liquid_glass();
 
         div()
             .h_full()
@@ -1330,7 +1299,7 @@ impl StreamovieApp {
                     .bg(fill)
                     .border_1()
                     .border_color(stroke)
-                    .shadow(liquid_shadow(dark))
+                    .shadow(liquid_shadow())
                     .px(px(10.))
                     .pt(px(8.))
                     .pb(px(12.))
@@ -1351,7 +1320,7 @@ impl StreamovieApp {
                             .left(px(16.))
                             .right(px(16.))
                             .h(px(1.))
-                            .bg(white().opacity(if dark { 0.55 } else { 0.9 })),
+                            .bg(white().opacity(0.9)),
                     )
                     .child(
                         v_flex()
@@ -1377,18 +1346,9 @@ impl StreamovieApp {
         let locale = self.locale();
         let dict = locale.dict();
         let rtl = locale.is_rtl();
-        let dark = cx.theme().is_dark();
-        let (fill, stroke, sheen) = liquid_glass(dark);
-        let lens = if dark {
-            hsla(0.0, 0.0, 1.0, 0.10)
-        } else {
-            hsla(240.0 / 360.0, 0.08, 0.95, 1.0)
-        };
-        let lens_stroke = if dark {
-            hsla(0.0, 0.0, 1.0, 0.22)
-        } else {
-            hsla(0.0, 0.0, 0.0, 0.06)
-        };
+        let (fill, stroke, sheen) = liquid_glass();
+        let lens = hsla(240.0 / 360.0, 0.08, 0.95, 1.0);
+        let lens_stroke = hsla(0.0, 0.0, 0.0, 0.06);
         let title = match self.section {
             NavSection::Home => dict.nav.home,
             NavSection::Movies => dict.nav.movies,
@@ -1397,12 +1357,6 @@ impl StreamovieApp {
             NavSection::Bookmarks => dict.nav.bookmarks,
             NavSection::Settings => dict.nav.settings,
         };
-        let mode_icon = match self.settings.theme_mode {
-            ThemeModePreference::Dark => IconName::Moon,
-            ThemeModePreference::Light => IconName::Sun,
-            ThemeModePreference::System => IconName::Palette,
-        };
-
         div()
             .w_full()
             .flex_shrink_0()
@@ -1419,7 +1373,7 @@ impl StreamovieApp {
                     .bg(fill)
                     .border_1()
                     .border_color(stroke)
-                    .shadow(liquid_shadow(dark))
+                    .shadow(liquid_shadow())
                     .child(div().absolute().inset_0().rounded(px(16.)).bg(sheen))
                     .child(
                         div()
@@ -1428,7 +1382,7 @@ impl StreamovieApp {
                             .left(px(22.))
                             .right(px(22.))
                             .h(px(1.))
-                            .bg(white().opacity(if dark { 0.62 } else { 0.95 })),
+                            .bg(white().opacity(0.95)),
                     )
                     .child(
                         directional_row(h_flex(), rtl)
@@ -1461,17 +1415,6 @@ impl StreamovieApp {
                                         cx.listener(|this, _, window, cx| {
                                             this.toggle_locale(Some(window), cx);
                                         }),
-                                    ))
-                                    .child(glass_chip(
-                                        "toolbar-theme",
-                                        None,
-                                        Some(mode_icon),
-                                        lens,
-                                        lens_stroke,
-                                        cx.theme().foreground,
-                                        cx.listener(|this, _, window, cx| {
-                                            this.cycle_theme_mode(Some(window), cx);
-                                        }),
                                     )),
                             ),
                     ),
@@ -1480,40 +1423,32 @@ impl StreamovieApp {
     }
 }
 
-fn liquid_glass(dark: bool) -> (gpui_kit::Hsla, gpui_kit::Hsla, gpui_kit::Background) {
-    let fill = if dark {
-        hsla(240.0 / 360.0, 0.08, 0.46, 0.28)
-    } else {
-        hsla(0.0, 0.0, 1.0, 0.86)
-    };
-    let stroke = if dark {
-        hsla(0.0, 0.0, 1.0, 0.22)
-    } else {
-        hsla(0.0, 0.0, 0.0, 0.08)
-    };
+fn liquid_glass() -> (gpui_kit::Hsla, gpui_kit::Hsla, gpui_kit::Background) {
+    let fill = hsla(0.0, 0.0, 1.0, 0.86);
+    let stroke = hsla(0.0, 0.0, 0.0, 0.08);
     let sheen = linear_gradient(
         180.,
-        linear_color_stop(white().opacity(if dark { 0.16 } else { 0.72 }), 0.),
+        linear_color_stop(white().opacity(0.72), 0.),
         linear_color_stop(white().opacity(0.0), 1.),
     );
     (fill, stroke, sheen.into())
 }
 
-fn liquid_shadow(dark: bool) -> Vec<BoxShadow> {
+fn liquid_shadow() -> Vec<BoxShadow> {
     vec![
         BoxShadow {
             offset: point(px(0.), px(1.)),
             blur_radius: px(0.),
             spread_radius: px(0.),
             inset: true,
-            color: white().opacity(if dark { 0.28 } else { 0.8 }),
+            color: white().opacity(0.8),
         },
         BoxShadow {
             offset: point(px(0.), px(16.)),
             blur_radius: px(40.),
             spread_radius: px(-16.),
             inset: false,
-            color: hsla(0.0, 0.0, 0.0, if dark { 0.45 } else { 0.08 }),
+            color: hsla(0.0, 0.0, 0.0, 0.08),
         },
     ]
 }
@@ -1647,11 +1582,7 @@ impl Render for StreamovieApp {
         div()
             .size_full()
             .font_family(locale.font_family())
-            .bg(if cx.theme().is_dark() {
-                hsla(240.0 / 360.0, 0.02, 0.03, 1.0)
-            } else {
-                cx.theme().background
-            })
+            .bg(cx.theme().background)
             .text_color(cx.theme().foreground)
             .child(
                 v_flex()

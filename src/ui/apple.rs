@@ -1,10 +1,8 @@
-//! Apple TV light-theme surfaces, type, and pressable controls.
+//! Apple TV light surfaces, type, and pressable controls.
 //!
-//! Dark mode keeps the same layout with inverted ink so the appearance toggle
-//! still reads clearly. Light mode is the Apple TV page: white cards, ink
-//! buttons, and a soft gray canvas.
+//! The app is light only: white cards, ink buttons, and a soft gray canvas.
 
-use gpui_kit::component::{ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt as _, h_flex};
+use gpui_kit::component::{Icon, IconName, Sizable as _, StyledExt as _, h_flex};
 use gpui_kit::{
     AnimationExt as _, AnyElement, App, BoxShadow, ClickEvent, Context, Hsla,
     InteractiveElement as _, IntoElement, MouseButton, MouseDownEvent, MouseUpEvent,
@@ -91,8 +89,8 @@ impl ApplePaint {
         }
     }
 
-    pub fn from_cx(cx: &gpui_kit::App) -> Self {
-        Self::resolve(cx.theme().is_dark())
+    pub fn from_cx(_cx: &gpui_kit::App) -> Self {
+        Self::resolve(false)
     }
 
     pub fn poster_shadow(self, lifted: bool) -> Vec<BoxShadow> {

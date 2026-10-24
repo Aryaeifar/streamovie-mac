@@ -7,7 +7,7 @@ pub mod settings;
 use std::{fs, path::PathBuf};
 
 pub use bookmarks::BookmarkStorage;
-pub use settings::{AccentPalette, PersistedSettings, SettingsStorage, ThemeModePreference};
+pub use settings::{AccentPalette, PersistedSettings, SettingsStorage};
 
 const APP_DATA_FOLDER: &str = "com.streamovie.mac";
 
