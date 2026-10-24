@@ -269,56 +269,6 @@ pub struct Episode {
     pub sources: Vec<SourceLink>,
 }
 
-/// Spotlight hero item with curated backdrop and Persian localized copy.
-#[derive(Clone, Debug)]
-pub struct HeroSpotlightItem {
-    pub media: ApiMedia,
-    pub category: MediaCategory,
-    pub artwork: Option<String>,
-    pub title_fa: Option<String>,
-    pub description_fa: Option<String>,
-}
-
-/// Curated spotlight hero metadata from `Streamovie/src/app/page.tsx`.
-pub const HERO_SPOTLIGHT_SPECS: [(&str, &str, &str, &str); 6] = [
-    (
-        "Friends",
-        "https://wallpapercrafter.com/desktop1/520373-Chandler-Bing-David-Schwimmer-Friends-TV-Series.jpg",
-        "فرندز",
-        "شش دوست در نیویورک با لحظه‌های خنده‌دار، رابطه‌های پیچیده و ماجراهای روزمره کنار هم بزرگ می‌شوند.",
-    ),
-    (
-        "Attack on Titan",
-        "https://global-img.gamergen.com/shingeki-no-kyojin-attack-on-titan-final-season-29-05-2020_0900953328.jpg",
-        "حمله به تایتان",
-        "انسان‌ها پشت دیوارهای عظیم از تایتان‌ها پناه گرفته‌اند؛ کشف حقیقت، سرنوشتشان را دگرگون می‌کند.",
-    ),
-    (
-        "Berserk",
-        "https://server.wallpaperalchemy.com/storage/wallpapers/423/berserk-guts-moon-wallpaper-4k.jpg",
-        "برزرک",
-        "گاتس، جنگجویی تنها در دنیایی تاریک، با سرنوشتی خونین و نیروهای اهریمنی روبه‌روست.",
-    ),
-    (
-        "Dark",
-        "https://img.zeit.de/kultur/film/2017-11/dark-netflix-louis-hofmann-teaser/wide__1300x731",
-        "دارک",
-        "ناپدیدشدن یک کودک در شهری کوچک، رازهای چند نسل و پیوند پیچیده زمان را آشکار می‌کند.",
-    ),
-    (
-        "Breaking Bad",
-        "https://img.apmcdn.org/ef7946f7c9a4e263229a4b3e0fb182618ab18f73/normal/baca2e-20131004-breaking-bad.jpg",
-        "بریکینگ بد",
-        "یک معلم شیمی پس از تشخیص بیماری، وارد دنیای تولید مواد مخدر می‌شود و زندگی‌اش را به مسیری خطرناک می‌کشاند.",
-    ),
-    (
-        "Game of Thrones",
-        "https://media.assettype.com/thequint/2019-04/6ce6797f-d7d9-4fec-897c-8a167105d56e/Got_Hero_Image.jpg",
-        "بازی تاج‌وتخت",
-        "خاندان‌های قدرتمند برای تخت آهنین می‌جنگند، در حالی که تهدیدی فراسوی دیوار در حال نزدیک‌شدن است.",
-    ),
-];
-
 fn first_non_empty_str(candidates: &[Option<&str>]) -> Option<String> {
     for candidate in candidates.iter().flatten() {
         let trimmed = candidate.trim();

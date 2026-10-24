@@ -6,10 +6,7 @@ use gpui_kit::component::IconName;
 
 use crate::{
     i18n::Dictionary,
-    models::{
-        ApiGenre, ApiMedia, ApiSeason, BrowseSort, HeroSpotlightItem, MediaCategory, OmdbDetails,
-        OmdbSeason,
-    },
+    models::{ApiGenre, ApiMedia, ApiSeason, BrowseSort, MediaCategory, OmdbDetails, OmdbSeason},
 };
 
 /// Top-level sidebar navigation sections required by the desktop specification.
@@ -104,8 +101,6 @@ impl MediaFilterTab {
 pub struct HomeFeedState {
     pub loading: bool,
     pub error: Option<String>,
-    pub spotlight: Vec<HeroSpotlightItem>,
-    pub spotlight_index: usize,
     pub latest_movies: Vec<ApiMedia>,
     pub latest_series: Vec<ApiMedia>,
     pub imdb_movies: Vec<ApiMedia>,

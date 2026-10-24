@@ -52,9 +52,9 @@ pub fn render_search_view(app: &StreamovieApp, cx: &mut Context<StreamovieApp>) 
 
     v_flex()
         .w_full()
-        .px_8()
-        .pt_8()
-        .pb_12()
+        .px(px(24.))
+        .pt(px(20.))
+        .pb(px(40.))
         .gap_6()
         .child(
             v_flex()
@@ -62,17 +62,17 @@ pub fn render_search_view(app: &StreamovieApp, cx: &mut Context<StreamovieApp>) 
                 .max_w(px(760.))
                 .gap_4()
                 .when(rtl, |col| col.items_end())
-                .child(div().text_2xl().font_semibold().child(dict.nav.search))
                 .child(
-                    div().w_full().child(
-                        Input::new(app.search_input())
-                            .large()
-                            .cleanable(true)
-                            .prefix(
-                                Icon::new(IconName::Search).text_color(cx.theme().muted_foreground),
-                            ),
-                    ),
+                    div()
+                        .text_size(px(28.))
+                        .font_semibold()
+                        .child(dict.nav.search),
                 )
+                .child(div().w_full().child(
+                    Input::new(app.search_input()).cleanable(true).prefix(
+                        Icon::new(IconName::Search).text_color(cx.theme().muted_foreground),
+                    ),
+                ))
                 .child(
                     directional_row(h_flex(), rtl)
                         .gap_2()
@@ -156,9 +156,8 @@ pub fn render_search_view(app: &StreamovieApp, cx: &mut Context<StreamovieApp>) 
                 .child(
                     h_flex()
                         .flex_wrap()
-                        .gap_x_4()
-                        .gap_y(px(72.))
-                        .py(px(36.))
+                        .gap(px(16.))
+                        .py(px(8.))
                         .when(rtl, |row| row.flex_row_reverse())
                         .children(cards),
                 )

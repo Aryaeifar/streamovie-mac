@@ -7,6 +7,7 @@ use gpui_kit::component::{
     empty::{Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyMediaVariant, EmptyTitle},
     h_flex,
     skeleton::Skeleton,
+    spinner::Spinner,
     v_flex,
 };
 use gpui_kit::{
@@ -95,9 +96,9 @@ pub fn render_catalog_view(
 
     v_flex()
         .w_full()
-        .px_8()
-        .pt_6()
-        .pb_12()
+        .px(px(24.))
+        .pt(px(20.))
+        .pb(px(40.))
         .gap_5()
         .child(
             directional_row(h_flex(), rtl)
@@ -108,10 +109,10 @@ pub fn render_catalog_view(
                     v_flex()
                         .gap_1()
                         .when(rtl, |col| col.items_end().text_right())
-                        .child(div().text_2xl().font_semibold().child(title))
+                        .child(div().text_size(px(28.)).font_semibold().child(title))
                         .child(
                             div()
-                                .text_sm()
+                                .text_size(px(13.))
                                 .text_color(cx.theme().muted_foreground)
                                 .child(subtitle),
                         ),
@@ -170,7 +171,7 @@ pub fn render_catalog_view(
                         .into_any_element()
                 }))
                 .into_any_element()
-        } else if let Some(err) = state.error.clone() {
+        } else if let Some(err) = state.error.clone().filter(|_| state.items.is_empty()) {
             v_flex()
                 .gap_3()
                 .child(Alert::error("catalog-error", err).title(dict.browse.load_error))
@@ -203,27 +204,55 @@ pub fn render_catalog_view(
                 .child(
                     h_flex()
                         .flex_wrap()
-                        .gap_x_4()
-                        .gap_y(px(72.))
-                        .py(px(36.))
+                        .gap(px(16.))
+                        .py(px(8.))
                         .when(rtl, |row| row.flex_row_reverse())
                         .children(cards),
                 )
-                .when(state.has_more, |col| {
+                .when(state.loading_more, |col| {
                     col.child(
-                        Button::new(SharedString::from(format!(
-                            "load-more-{}",
-                            category.as_str()
-                        )))
-                        .outline()
-                        .label(if state.loading_more {
-                            dict.browse.loading_more
-                        } else {
-                            dict.browse.load_more
-                        })
-                        .on_click(cx.listener(move |this, _, _, cx| {
-                            this.load_more_catalog(category, cx);
-                        })),
+                        directional_row(h_flex(), rtl)
+                            .w_full()
+                            .justify_center()
+                            .gap_2()
+                            .py(px(8.))
+                            .child(Spinner::new().small())
+                            .child(
+                                div()
+                                    .text_size(px(13.))
+                                    .text_color(cx.theme().muted_foreground)
+                                    .child(dict.browse.loading_more),
+                            ),
+                    )
+                })
+                .when(state.error.is_some(), |col| {
+                    let message = state.error.clone().unwrap_or_default();
+                    col.child(
+                        directional_row(h_flex(), rtl)
+                            .w_full()
+                            .justify_center()
+                            .gap_3()
+                            .items_center()
+                            .child(
+                                div()
+                                    .text_size(px(13.))
+                                    .text_color(cx.theme().muted_foreground)
+                                    .child(message),
+                            )
+                            .child(
+                                Button::new(SharedString::from(format!(
+                                    "load-more-retry-{}",
+                                    category.as_str()
+                                )))
+                                .small()
+                                .outline()
+                                .label(dict.actions.retry)
+                                .on_click(cx.listener(
+                                    move |this, _, _, cx| {
+                                        this.load_more_catalog(category, cx);
+                                    },
+                                )),
+                            ),
                     )
                 })
                 .into_any_element()

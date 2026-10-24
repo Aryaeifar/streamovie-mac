@@ -1,11 +1,12 @@
-//! Home discovery: spotlight and horizontal rails.
+//! Home discovery: horizontal rails.
 
 use gpui_kit::component::{
     ActiveTheme as _, IconName, Sizable as _, StyledExt as _, alert::Alert, button::Button, h_flex,
     skeleton::Skeleton, v_flex,
 };
 use gpui_kit::{
-    AnyElement, Context, InteractiveElement as _, IntoElement, ParentElement as _, SharedString,
+    AnyElement, Context, InteractiveElement as _, IntoElement, MouseButton, MouseDownEvent,
+    MouseMoveEvent, MouseUpEvent, ParentElement as _, SharedString,
     StatefulInteractiveElement as _, Styled as _, div, prelude::FluentBuilder as _, px,
 };
 
@@ -14,7 +15,7 @@ use crate::{
     i18n::directional_row,
     models::{ApiMedia, BrowseSort, MediaCategory},
     state::NavSection,
-    ui::components::{PosterCardStyle, render_hero_banner, render_poster_card_with_style},
+    ui::components::{PosterCardStyle, render_poster_card_with_style},
 };
 
 pub fn render_home_view(app: &StreamovieApp, cx: &mut Context<StreamovieApp>) -> AnyElement {
@@ -26,8 +27,9 @@ pub fn render_home_view(app: &StreamovieApp, cx: &mut Context<StreamovieApp>) ->
     if home.loading && home.latest_movies.is_empty() && home.latest_series.is_empty() {
         return v_flex()
             .w_full()
+            .px(px(24.))
+            .pt(px(20.))
             .gap_6()
-            .child(Skeleton::new().w_full().h(px(560.)))
             .child(
                 h_flex()
                     .px_8()
@@ -39,43 +41,36 @@ pub fn render_home_view(app: &StreamovieApp, cx: &mut Context<StreamovieApp>) ->
             .into_any_element();
     }
 
-    let hero = if !home.spotlight.is_empty() {
-        let active_ix = home
-            .spotlight_index
-            .min(home.spotlight.len().saturating_sub(1));
-        let active_id = home.spotlight[active_ix].media.id;
-        render_hero_banner(
-            app,
-            &home.spotlight,
-            active_ix,
-            locale,
-            app.is_bookmarked(active_id),
-            app.is_liked(active_id),
-            cx,
-        )
-    } else if let Some(err) = home.error.clone() {
-        v_flex()
-            .px_8()
-            .pt_8()
-            .gap_3()
-            .child(Alert::error("home-load-error", err).title(dict.home.unavailable_title))
-            .child(
-                Button::new("home-retry")
-                    .outline()
-                    .icon(IconName::RefreshCw)
-                    .label(dict.actions.retry)
-                    .on_click(cx.listener(|this, _, _, cx| this.reload_home_feeds(cx))),
-            )
-            .into_any_element()
-    } else {
-        div().h(px(48.)).into_any_element()
-    };
+    let load_error = home.error.clone().filter(|_| {
+        home.latest_movies.is_empty()
+            && home.latest_series.is_empty()
+            && home.imdb_movies.is_empty()
+            && home.imdb_series.is_empty()
+    });
 
     v_flex()
         .w_full()
-        .gap_8()
+        .min_w_0()
+        .max_w_full()
+        .overflow_hidden()
+        .gap(px(28.))
+        .pt(px(12.))
         .pb_16()
-        .child(hero)
+        .when_some(load_error, |col, err| {
+            col.child(
+                v_flex()
+                    .px(px(24.))
+                    .gap_3()
+                    .child(Alert::error("home-load-error", err).title(dict.home.unavailable_title))
+                    .child(
+                        Button::new("home-retry")
+                            .outline()
+                            .icon(IconName::RefreshCw)
+                            .label(dict.actions.retry)
+                            .on_click(cx.listener(|this, _, _, cx| this.reload_home_feeds(cx))),
+                    ),
+            )
+        })
         .child(rail(
             app,
             0,
@@ -148,6 +143,8 @@ fn rail(
     let dict = app.locale().dict();
     let locale = app.locale();
     let scroll_handle = app.home_row_scroll_handle(row_index).clone();
+    let (card_w, _) = card_style.frame();
+    let card_gap = px(16.);
     let cards: Vec<_> = items
         .iter()
         .take(18)
@@ -164,17 +161,30 @@ fn rail(
             )
         })
         .collect();
+    let count = cards.len() as f32;
+    let row_w = if count == 0. {
+        px(0.)
+    } else {
+        card_w * count + card_gap * (count - 1.)
+    };
 
     v_flex()
         .w_full()
-        .px_8()
-        .gap_3()
+        .min_w_0()
+        .max_w_full()
+        .px(px(24.))
+        .gap(px(10.))
         .child(
             directional_row(h_flex(), rtl)
                 .w_full()
                 .justify_between()
                 .items_center()
-                .child(div().text_lg().font_semibold().child(title.to_string()))
+                .child(
+                    div()
+                        .text_size(px(22.))
+                        .font_semibold()
+                        .child(title.to_string()),
+                )
                 .child(
                     directional_row(h_flex(), rtl)
                         .gap_1()
@@ -225,12 +235,34 @@ fn rail(
             div()
                 .id(SharedString::from(format!("rail-{section_key}")))
                 .w_full()
+                .min_w_0()
                 .overflow_x_scroll()
+                .restrict_scroll_to_axis()
                 .track_scroll(&scroll_handle)
+                .on_mouse_down(
+                    MouseButton::Left,
+                    cx.listener(move |this, event: &MouseDownEvent, _, _| {
+                        this.begin_rail_drag(row_index, event.position.x);
+                    }),
+                )
+                .on_mouse_move(cx.listener(move |this, event: &MouseMoveEvent, _, cx| {
+                    if event.dragging() {
+                        this.pan_rail(row_index, event.position.x, cx);
+                    }
+                }))
+                .on_mouse_up(
+                    MouseButton::Left,
+                    cx.listener(move |this, _: &MouseUpEvent, _, _| {
+                        this.end_rail_drag();
+                    }),
+                )
                 .child(
                     h_flex()
-                        .gap_4()
-                        .py(px(48.))
+                        .id(SharedString::from(format!("rail-row-{section_key}")))
+                        .flex_none()
+                        .w(row_w)
+                        .gap(card_gap)
+                        .py(px(12.))
                         .when(rtl, |row| row.flex_row_reverse())
                         .children(cards),
                 )

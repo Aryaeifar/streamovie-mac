@@ -41,9 +41,9 @@ pub fn render_bookmarks_view(app: &StreamovieApp, cx: &mut Context<StreamovieApp
 
     v_flex()
         .w_full()
-        .px_8()
-        .pt_6()
-        .pb_12()
+        .px(px(24.))
+        .pt(px(20.))
+        .pb(px(40.))
         .gap_5()
         .child(
             directional_row(h_flex(), rtl)
@@ -54,10 +54,15 @@ pub fn render_bookmarks_view(app: &StreamovieApp, cx: &mut Context<StreamovieApp
                     v_flex()
                         .gap_1()
                         .when(rtl, |col| col.items_end().text_right())
-                        .child(div().text_2xl().font_semibold().child(dict.bookmarks.title))
                         .child(
                             div()
-                                .text_sm()
+                                .text_size(px(28.))
+                                .font_semibold()
+                                .child(dict.bookmarks.title),
+                        )
+                        .child(
+                            div()
+                                .text_size(px(13.))
                                 .text_color(cx.theme().muted_foreground)
                                 .child(dict.bookmarks.subtitle),
                         ),
@@ -124,9 +129,8 @@ pub fn render_bookmarks_view(app: &StreamovieApp, cx: &mut Context<StreamovieApp
         } else {
             h_flex()
                 .flex_wrap()
-                .gap_x_4()
-                .gap_y(px(72.))
-                .py(px(36.))
+                .gap(px(16.))
+                .py(px(8.))
                 .when(rtl, |row| row.flex_row_reverse())
                 .children(cards)
                 .into_any_element()

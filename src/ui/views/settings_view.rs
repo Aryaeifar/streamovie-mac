@@ -9,7 +9,7 @@ use gpui_kit::component::{
 };
 use gpui_kit::{
     App, Context, IntoElement, ParentElement as _, SharedString, Styled as _, div,
-    prelude::FluentBuilder as _,
+    prelude::FluentBuilder as _, px,
 };
 
 use crate::{
@@ -132,7 +132,12 @@ pub fn render_settings_view(
                     v_flex()
                         .gap_1()
                         .when(rtl, |col| col.items_end().text_right())
-                        .child(div().text_2xl().font_semibold().child(dict.settings.title))
+                        .child(
+                            div()
+                                .text_size(px(28.))
+                                .font_semibold()
+                                .child(dict.settings.title),
+                        )
                         .child(
                             div()
                                 .text_sm()

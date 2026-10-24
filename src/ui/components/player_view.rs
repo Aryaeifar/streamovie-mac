@@ -2,7 +2,9 @@
 
 use crate::{app::StreamovieApp, i18n::directional_row, playback::PlaybackSession};
 use gpui_kit::component::{
-    ActiveTheme as _, IconName, StyledExt as _, button::Button, h_flex, v_flex,
+    ActiveTheme as _, IconName, StyledExt as _,
+    button::{Button, ButtonVariants as _},
+    h_flex, v_flex,
 };
 use gpui_kit::{AnyElement, Context, IntoElement, ParentElement as _, Styled as _, div, px, white};
 
@@ -21,15 +23,17 @@ pub fn render_player_view(
         .child(
             directional_row(h_flex(), rtl)
                 .w_full()
-                .px_5()
-                .h(px(56.))
+                .px(px(20.))
+                .h(px(44.))
+                .border_b_1()
+                .border_color(cx.theme().border)
                 .flex_shrink_0()
                 .items_center()
                 .justify_between()
                 .gap_4()
                 .child(
                     Button::new("player-back")
-                        .outline()
+                        .text()
                         .icon(if rtl {
                             IconName::ChevronRight
                         } else {

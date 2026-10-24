@@ -84,6 +84,9 @@ pub struct DetailsDict {
     pub duration: &'static str,
     pub genres: &'static str,
     pub cast: &'static str,
+    pub posters: &'static str,
+    pub info: &'static str,
+    pub more_like_this: &'static str,
     pub overview: &'static str,
     pub latest_quality: &'static str,
     pub not_found_title: &'static str,
@@ -163,6 +166,7 @@ pub struct CommonDict {
 }
 
 pub struct ThemeNamesDict {
+    pub apple: &'static str,
     pub paramount: &'static str,
     pub netflix: &'static str,
     pub midnight: &'static str,
@@ -307,7 +311,10 @@ pub static EN_DICTIONARY: Dictionary = Dictionary {
         duration: "Runtime",
         genres: "Genres",
         cast: "Cast",
-        overview: "Overview & Details",
+        posters: "Posters",
+        info: "Details",
+        more_like_this: "More like this",
+        overview: "Overview",
         latest_quality: "Best quality",
         not_found_title: "Title not found",
         not_found_body: "This item is not in the current catalog results.",
@@ -420,6 +427,7 @@ pub static EN_DICTIONARY: Dictionary = Dictionary {
         save: "Save preferences",
         saved_notice: "Preferences saved to local disk.",
         themes: ThemeNamesDict {
+            apple: "Apple",
             paramount: "Cinema",
             netflix: "Netflix",
             midnight: "Midnight",
@@ -510,7 +518,10 @@ pub static FA_DICTIONARY: Dictionary = Dictionary {
         duration: "مدت زمان",
         genres: "ژانرها",
         cast: "بازیگران",
-        overview: "خلاصه داستان و مشخصات",
+        posters: "پوسترها",
+        info: "جزئیات",
+        more_like_this: "عنوان‌های مشابه",
+        overview: "خلاصه",
         latest_quality: "بهترین کیفیت",
         not_found_title: "عنوان پیدا نشد",
         not_found_body: "این آیتم در نتایج فعلی فهرست نیست.",
@@ -623,6 +634,7 @@ pub static FA_DICTIONARY: Dictionary = Dictionary {
         save: "ذخیره تنظیمات",
         saved_notice: "تنظیمات در حافظه محلی ذخیره شد.",
         themes: ThemeNamesDict {
+            apple: "اپل",
             paramount: "سینما",
             netflix: "نتفلیکس",
             midnight: "نیمه‌شب",

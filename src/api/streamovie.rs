@@ -10,8 +10,7 @@ use serde::de::DeserializeOwned;
 use crate::{
     config::AppConfig,
     models::{
-        ApiCountry, ApiGenre, ApiMedia, ApiSeason, BrowseSort, HERO_SPOTLIGHT_SPECS,
-        HeroSpotlightItem, MediaCategory, SearchResponse, exclude_hidden_media,
+        ApiCountry, ApiGenre, ApiMedia, ApiSeason, BrowseSort, SearchResponse, exclude_hidden_media,
     },
 };
 
@@ -165,54 +164,5 @@ impl StreamovieClient {
             .request_with_fallback(&path)
             .context("Failed to fetch media by country")?;
         Ok(exclude_hidden_media(items))
-    }
-
-    /// Resolves the curated featured spotlight series from `Streamovie/src/app/page.tsx`
-    /// (`Friends`, `Attack on Titan`, `Berserk`, `Dark`, `Breaking Bad`, `Game of Thrones`),
-    /// falling back to top catalog items if any query does not match.
-    pub fn fetch_featured_spotlight(&self, fallback_series: &[ApiMedia]) -> Vec<HeroSpotlightItem> {
-        let mut spotlight = Vec::new();
-
-        for (title, backdrop, title_fa, description_fa) in HERO_SPOTLIGHT_SPECS {
-            let needle = title.to_lowercase();
-            if let Ok(results) = self.search(title) {
-                if let Some(matched) = results.into_iter().find(|media| {
-                    let candidates = [
-                        media.title.as_deref(),
-                        media.name.as_deref(),
-                        media.extra.get("original_title").and_then(|v| v.as_str()),
-                        media.extra.get("original_name").and_then(|v| v.as_str()),
-                        media.extra.get("en_title").and_then(|v| v.as_str()),
-                    ];
-                    candidates.into_iter().flatten().any(|name| {
-                        let lower = name.to_lowercase();
-                        lower == needle || lower.contains(&needle)
-                    })
-                }) {
-                    spotlight.push(HeroSpotlightItem {
-                        media: matched,
-                        category: MediaCategory::Series,
-                        artwork: Some(backdrop.to_string()),
-                        title_fa: Some(title_fa.to_string()),
-                        description_fa: Some(description_fa.to_string()),
-                    });
-                }
-            }
-        }
-
-        if spotlight.is_empty() {
-            for media in fallback_series.iter().take(6).cloned() {
-                let artwork = media.hero_image();
-                spotlight.push(HeroSpotlightItem {
-                    media,
-                    category: MediaCategory::Series,
-                    artwork,
-                    title_fa: None,
-                    description_fa: None,
-                });
-            }
-        }
-
-        spotlight
     }
 }
