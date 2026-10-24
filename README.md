@@ -60,4 +60,3 @@ cargo run
 cargo build --release
 ```
 
-The GitHub workflow copies `target/release/streamovie-mac` into `Streamovie.app`, adds `assets/AppIcon.icns`, signs the bundle, and writes `Streamovie-mac.dmg`.
