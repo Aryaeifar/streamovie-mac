@@ -51,6 +51,13 @@ pub struct ActionsDict {
     pub unlike: &'static str,
     pub watch_now: &'static str,
     pub see_more: &'static str,
+    pub play: &'static str,
+    pub open_externally: &'static str,
+    pub download_started: &'static str,
+    pub download_failed: &'static str,
+    pub download_complete: &'static str,
+    pub download_in_progress: &'static str,
+    pub playback_failed: &'static str,
 }
 
 pub struct HomeDict {
@@ -163,7 +170,7 @@ pub struct CommonDict {
 }
 
 pub struct ThemeNamesDict {
-    pub paramount: &'static str,
+    pub streamovie: &'static str,
     pub netflix: &'static str,
     pub midnight: &'static str,
     pub aurora: &'static str,
@@ -259,6 +266,13 @@ pub static EN_DICTIONARY: Dictionary = Dictionary {
         unlike: "Unlike",
         watch_now: "Watch now",
         see_more: "See more",
+        play: "Play",
+        open_externally: "Open externally",
+        download_started: "Download started",
+        download_failed: "Download failed",
+        download_complete: "Download complete",
+        download_in_progress: "Download in progress…",
+        playback_failed: "Playback failed",
     },
     home: HomeDict {
         featured: "Featured Spotlight",
@@ -388,7 +402,7 @@ pub static EN_DICTIONARY: Dictionary = Dictionary {
         save: "Save preferences",
         saved_notice: "Preferences saved to local disk.",
         themes: ThemeNamesDict {
-            paramount: "Paramount+",
+            streamovie: "Streamovie",
             netflix: "Netflix",
             midnight: "Midnight",
             aurora: "Aurora",
@@ -447,6 +461,13 @@ pub static FA_DICTIONARY: Dictionary = Dictionary {
         unlike: "لغو پسند",
         watch_now: "تماشا کنید",
         see_more: "مشاهده بیشتر",
+        play: "پخش",
+        open_externally: "بازکردن خارجی",
+        download_started: "دانلود آغاز شد",
+        download_failed: "دانلود ناموفق بود",
+        download_complete: "دانلود کامل شد",
+        download_in_progress: "در حال دانلود…",
+        playback_failed: "پخش ناموفق بود",
     },
     home: HomeDict {
         featured: "ویژه‌ی منتخب",
@@ -576,7 +597,7 @@ pub static FA_DICTIONARY: Dictionary = Dictionary {
         save: "ذخیره تنظیمات",
         saved_notice: "تنظیمات در حافظه محلی ذخیره شد.",
         themes: ThemeNamesDict {
-            paramount: "پارامونت پلاس",
+            streamovie: "استریم‌مووی",
             netflix: "نتفلیکس",
             midnight: "نیمه‌شب",
             aurora: "شفق",

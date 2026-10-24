@@ -5,6 +5,7 @@ mod app;
 mod config;
 mod i18n;
 mod models;
+mod player;
 mod state;
 mod storage;
 mod ui;

@@ -1,12 +1,14 @@
-//! Local disk storage for bookmarks (`bookmarks.json`) and user preferences (`settings.json`)
-//! inside `~/Library/Application Support/com.streamovie.mac/`.
+//! Local disk storage for bookmarks (`bookmarks.json`), user preferences (`settings.json`),
+//! and episode downloads inside `~/Library/Application Support/com.streamovie.mac/`.
 
 pub mod bookmarks;
+pub mod downloads;
 pub mod settings;
 
 use std::{fs, path::PathBuf};
 
 pub use bookmarks::BookmarkStorage;
+pub use downloads::{DownloadManager, DownloadStatus};
 pub use settings::{AccentPalette, PersistedSettings, SettingsStorage, ThemeModePreference};
 
 const APP_DATA_FOLDER: &str = "com.streamovie.mac";

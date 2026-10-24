@@ -1,10 +1,10 @@
-//! List / Catalog screen completely redesigned to match Paramount+ Browse UI/UX.
+//! List / Catalog screen completely redesigned to match Streamovie Browse UI/UX.
 //!
 //! Features:
-//! - Paramount+ high-impact catalog header with section title, subtitle, and results counter
-//! - Paramount+ dark glass filter surface with Sort pills (Latest / IMDb Top Rated) and Genre pills
-//! - Clean multi-column grid of Paramount+ poster cards with hover elevation and luminous glow
-//! - Paramount+ "LOAD MORE" CTA button
+//! - Streamovie high-impact catalog header with section title, subtitle, and results counter
+//! - Streamovie dark glass filter surface with Sort pills (Latest / IMDb Top Rated) and Genre pills
+//! - Clean multi-column grid of Streamovie poster cards with hover elevation and luminous glow
+//! - Streamovie "LOAD MORE" CTA button
 
 use gpui_kit::{
     AnyElement, Context, IntoElement, ParentElement as _, SharedString, Styled as _, div,
@@ -55,14 +55,14 @@ pub fn render_catalog_view(
         BrowseSort::Imdb => 1,
     };
 
-    let sort_tab_id = SharedString::from(format!("paramount-catalog-sort-{}", category.as_str()));
+    let sort_tab_id = SharedString::from(format!("streamovie-catalog-sort-{}", category.as_str()));
     let scope_key = format!("catalog-{}", category.as_str());
 
     let mut genre_buttons = Vec::new();
     if !genres.is_empty() {
         let active_genre = state.genre_id;
         genre_buttons.push(
-            Button::new("paramount-genre-all")
+            Button::new("streamovie-genre-all")
                 .small()
                 .selected(active_genre == 0)
                 .when(active_genre == 0, |btn| btn.primary())
@@ -76,7 +76,7 @@ pub fn render_catalog_view(
             let gid = genre.id;
             let is_selected = active_genre == gid;
             genre_buttons.push(
-                Button::new(SharedString::from(format!("paramount-genre-{gid}")))
+                Button::new(SharedString::from(format!("streamovie-genre-{gid}")))
                     .small()
                     .selected(is_selected)
                     .when(is_selected, |btn| btn.primary())
@@ -106,7 +106,7 @@ pub fn render_catalog_view(
         .w_full()
         .gap_6()
         .pb_12()
-        // Paramount+ Catalog Header & Filter Surface
+        // Streamovie Catalog Header & Filter Surface
         .child(
             v_flex()
                 .w_full()
@@ -167,7 +167,7 @@ pub fn render_catalog_view(
                                         ),
                                 ),
                         )
-                        // Paramount+ Sort Tabs
+                        // Streamovie Sort Tabs
                         .child(
                             directional_row(h_flex(), rtl)
                                 .items_center()
@@ -198,7 +198,7 @@ pub fn render_catalog_view(
                                     state.genre_id > 0 || state.sort != BrowseSort::Created,
                                     |row| {
                                         row.child(
-                                            Button::new("paramount-catalog-clear")
+                                            Button::new("streamovie-catalog-clear")
                                                 .small()
                                                 .outline()
                                                 .icon(IconName::Undo2)
@@ -228,10 +228,10 @@ pub fn render_catalog_view(
                 v_flex()
                     .w_full()
                     .gap_2()
-                    .child(Alert::error("paramount-catalog-error", err).title(dict.browse.load_error))
+                    .child(Alert::error("streamovie-catalog-error", err).title(dict.browse.load_error))
                     .child(
                         directional_row(h_flex(), rtl).child(
-                            Button::new("paramount-catalog-retry")
+                            Button::new("streamovie-catalog-retry")
                                 .small()
                                 .outline()
                                 .icon(IconName::RefreshCw)
@@ -286,7 +286,7 @@ pub fn render_catalog_view(
                 .when(state.has_more, |col| {
                     col.child(
                         h_flex().w_full().justify_center().pt_3().child(
-                            Button::new("paramount-catalog-load-more")
+                            Button::new("streamovie-catalog-load-more")
                                 .primary()
                                 .large()
                                 .loading(state.loading_more)

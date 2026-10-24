@@ -1,12 +1,5 @@
-//! Rich Title Details view completely redesigned with Paramount+ aesthetic.
-//!
-//! Features:
-//! - Full-bleed backdrop hero stage with dual gradient scrims and Paramount+ branding
-//! - Floating 2:3 cinema poster card with crisp 8px corners and luminous Paramount Blue shadow
-//! - Neon cyan status kicker ("NOW STREAMING"), metadata row (DRAMA · YEAR · TV-MA · 4K UHD · ★ IMDb)
-//! - Primary electric Paramount Blue ("#0064FF") "▶ WATCH NOW" CTA + Watchlist "+" + Trailer actions
-//! - OMDb / IMDb scorecards and catalog metadata
-//! - Paramount+ Season pill selector + widescreen (180x101) episode guide cards with direct stream and download options
+//! Streamovie title details: cinematic stage, Watch Now → in-app player,
+//! season/episode Play vs Download, and OMDb enrichment.
 
 use gpui_kit::{
     AnyElement, BoxShadow, Context, IntoElement, ParentElement as _, Styled as _, div, hsla,
@@ -30,7 +23,7 @@ use crate::{
     i18n::{directional_row, format_count, is_persian_text},
     models::{MediaCategory, OmdbDetails},
     state::DetailsState,
-    ui::{components::render_source_links, image_cache::render_remote_image},
+    ui::{components::{render_episode_actions, render_source_links}, image_cache::render_remote_image},
 };
 
 pub fn render_details_view(
@@ -66,7 +59,7 @@ pub fn render_details_view(
         app,
         poster_url.as_deref(),
         cover_url.as_deref(),
-        px(8.), // Paramount+ 8px radius
+        crate::ui::theme_tokens::RADIUS,
         if category == MediaCategory::Series {
             IconName::Frame
         } else {
@@ -118,10 +111,10 @@ pub fn render_details_view(
         .w_full()
         .gap_6()
         .pb_12()
-        // Paramount+ Back Navigation Bar
+        // Back navigation
         .child(
             directional_row(h_flex(), rtl).w_full().child(
-                Button::new("paramount-details-back-btn")
+                Button::new("streamovie-details-back-btn")
                     .outline()
                     .small()
                     .icon(if rtl {
@@ -135,7 +128,7 @@ pub fn render_details_view(
                     })),
             ),
         )
-        // Paramount+ Cinematic Full-Bleed Backdrop Stage + Floating Poster
+        // Cinematic stage + floating poster
         .child(
             div()
                 .relative()
@@ -152,7 +145,7 @@ pub fn render_details_view(
                 // 2. Dual Cinematic Gradient Scrims
                 .child(div().absolute().inset_0().bg(scrim_side))
                 .child(div().absolute().inset_0().bg(scrim_bottom))
-                // 3. Top-Right Paramount+ Original Watermark
+                // Quiet Streamovie watermark
                 .child(
                     directional_row(h_flex(), rtl)
                         .absolute()
@@ -172,7 +165,7 @@ pub fn render_details_view(
                                 .text_size(px(13.))
                                 .font_extrabold()
                                 .text_color(white())
-                                .child("Paramount+"),
+                                .child(dict.brand.name),
                         )
                         .child(
                             div()
@@ -194,7 +187,7 @@ pub fn render_details_view(
                         .items_end()
                         .gap_7()
                         .p_7()
-                        // Floating 2:3 Cinema Poster (210x315) with Paramount+ Blue Shadow
+                        // Floating poster
                         .child(
                             div()
                                 .w(px(210.))
@@ -259,7 +252,7 @@ pub fn render_details_view(
                                         .when(title_rtl, |this| this.text_right())
                                         .child(title.clone()),
                                 )
-                                // Paramount+ Metadata Row: GENRE · YEAR · TV-MA · RUNTIME · 4K UHD · ★ IMDb
+                                // Metadata row
                                 .child(
                                     directional_row(h_flex(), rtl)
                                         .flex_wrap()
@@ -373,7 +366,7 @@ pub fn render_details_view(
                                             .child(overview),
                                     )
                                 })
-                                // Primary Paramount+ Action Bar
+                                // Primary action bar
                                 .child(
                                     directional_row(h_flex(), rtl)
                                         .pt_2()
@@ -382,22 +375,26 @@ pub fn render_details_view(
                                         .gap_3()
                                         // Primary Watch Now CTA
                                         .child(
-                                            Button::new("paramount-details-watch")
+                                            Button::new("streamovie-details-watch")
                                                 .primary()
                                                 .large()
                                                 .icon(IconName::Play)
                                                 .label(dict.actions.watch_now.to_uppercase())
-                                                .on_click(cx.listener(move |this, _, _, cx| {
-                                                    this.open_details(
-                                                        media_for_watch.clone(),
-                                                        category,
+                                                .on_click(cx.listener(move |this, _, window, cx| {
+                                                    let sources = media_for_watch.source_links();
+                                                    this.play_best_source(
+                                                        media_for_watch.display_title(),
+                                                        &sources,
+                                                        media_for_watch.id,
+                                                        None,
+                                                        window,
                                                         cx,
                                                     );
                                                 })),
                                         )
                                         // Watchlist "+" Button
                                         .child(
-                                            Button::new("paramount-details-bm-btn")
+                                            Button::new("streamovie-details-bm-btn")
                                                 .large()
                                                 .outline()
                                                 .selected(bookmarked)
@@ -427,7 +424,7 @@ pub fn render_details_view(
                                         )
                                         // Like Button
                                         .child(
-                                            Button::new("paramount-details-like")
+                                            Button::new("streamovie-details-like")
                                                 .large()
                                                 .outline()
                                                 .selected(liked)
@@ -445,7 +442,7 @@ pub fn render_details_view(
                                         .when_some(trailer, |row, tr| {
                                             let url = tr.url.clone();
                                             row.child(
-                                                Button::new("paramount-details-trailer")
+                                                Button::new("streamovie-details-trailer")
                                                     .large()
                                                     .outline()
                                                     .icon(IconName::Play)
@@ -529,7 +526,7 @@ fn render_omdb_enrichment_card(
                             )
                             .child(CardTitle::new().child(dict.details.show_info)),
                     )
-                    .child(Tag::primary().small().outline().child("Paramount+ · OMDb")),
+                    .child(Tag::primary().small().outline().child("Streamovie · OMDb")),
             ),
         )
         .child(CardContent::new().child(if details.omdb_loading {
@@ -682,6 +679,7 @@ fn render_downloads_and_seasons_panel(
     let dict = locale.dict();
     let rtl = locale.is_rtl();
     let is_movie = details.category == MediaCategory::Movie;
+    let media_id = details.media.id;
     let media_title = details.media.display_title();
     let episode_thumb_url = details
         .media
@@ -715,7 +713,16 @@ fn render_downloads_and_seasons_panel(
         )
         .child(CardContent::new().child(if is_movie {
             let movie_sources = details.media.source_links();
-            render_source_links(&movie_sources, &media_title, locale, "movie", cx)
+            render_source_links(
+                app,
+                &movie_sources,
+                &media_title,
+                locale,
+                "movie",
+                media_id,
+                None,
+                cx,
+            )
                 .into_any_element()
         } else if details.seasons_loading {
             h_flex()
@@ -786,14 +793,34 @@ fn render_downloads_and_seasons_panel(
                     format!("{media_title} S{season_number:02}E{ep_num:02} - {ep_title}");
                 let ep_prefix = format!("s{season_number}-e{ep_num}");
 
-                let source_links_el =
-                    render_source_links(ep_sources, &ep_context, locale, &ep_prefix, cx);
+                let ep_key = cat_ep
+                    .map(|e| e.key.clone())
+                    .unwrap_or_else(|| format!("e{ep_num}"));
+                let episode_actions_el = render_episode_actions(
+                    ep_sources,
+                    &ep_context,
+                    locale,
+                    &ep_prefix,
+                    media_id,
+                    &ep_key,
+                    cx,
+                );
+                let source_links_el = render_source_links(
+                    app,
+                    ep_sources,
+                    &ep_context,
+                    locale,
+                    &ep_prefix,
+                    media_id,
+                    Some(&ep_key),
+                    cx,
+                );
 
                 ep_cards.push(
                     div()
                         .w_full()
                         .p_4()
-                        .rounded(px(8.)) // Crisp Paramount+ 8px radius
+                        .rounded(crate::ui::theme_tokens::RADIUS)
                         .border_1()
                         .border_color(cx.theme().border)
                         .bg(cx.theme().popover)
@@ -813,7 +840,7 @@ fn render_downloads_and_seasons_panel(
                                                 .items_center()
                                                 .gap_3p5()
                                                 .min_w_0()
-                                                // Widescreen 180x101 Episode Thumbnail (Paramount+ style)
+                                                // Episode thumbnail
                                                 .child(
                                                     div()
                                                         .relative()
@@ -923,7 +950,7 @@ fn render_downloads_and_seasons_panel(
                                                 }),
                                         ),
                                  )
-                                // Bottom row: Stream / Download Source Pills
+                                .child(episode_actions_el)
                                 .child(source_links_el),
                         ),
                 );
@@ -933,7 +960,7 @@ fn render_downloads_and_seasons_panel(
                 .gap_5()
                 // Season Selector Pill Bar
                 .child(
-                    TabBar::new("paramount-details-season-tabs")
+                    TabBar::new("streamovie-details-season-tabs")
                         .pill()
                         .selected_index(selected_ix)
                         .children(details.seasons.iter().enumerate().map(|(ix, season)| {

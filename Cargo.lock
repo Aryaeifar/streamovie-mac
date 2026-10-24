@@ -6461,6 +6461,8 @@ dependencies = [
  "gpui-kit",
  "gpui-pre-reqwest",
  "gpui-pre-reqwest-client",
+ "objc2 0.6.5",
+ "objc2-foundation 0.3.2",
  "serde",
  "serde_json",
  "smol",

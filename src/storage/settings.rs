@@ -60,7 +60,8 @@ impl ThemeModePreference {
 #[serde(rename_all = "lowercase")]
 pub enum AccentPalette {
     #[default]
-    Paramount,
+    #[serde(alias = "paramount")]
+    Streamovie,
     Netflix,
     Midnight,
     Aurora,
@@ -72,7 +73,7 @@ pub enum AccentPalette {
 
 impl AccentPalette {
     pub const ALL: [Self; 8] = [
-        Self::Paramount,
+        Self::Streamovie,
         Self::Netflix,
         Self::Midnight,
         Self::Aurora,
@@ -84,7 +85,7 @@ impl AccentPalette {
 
     pub fn code(self) -> &'static str {
         match self {
-            Self::Paramount => "paramount",
+            Self::Streamovie => "streamovie",
             Self::Netflix => "netflix",
             Self::Midnight => "midnight",
             Self::Aurora => "aurora",
@@ -97,7 +98,8 @@ impl AccentPalette {
 
     pub fn from_code(code: &str) -> Self {
         match code {
-            "paramount" => Self::Paramount,
+            // Migrate persisted "paramount" accent from older installs.
+            "streamovie" | "paramount" => Self::Streamovie,
             "netflix" => Self::Netflix,
             "midnight" => Self::Midnight,
             "aurora" => Self::Aurora,
@@ -105,13 +107,13 @@ impl AccentPalette {
             "sunset" => Self::Sunset,
             "candy" => Self::Candy,
             "noir" => Self::Noir,
-            _ => Self::Paramount,
+            _ => Self::Streamovie,
         }
     }
 
     pub fn label(self, dict: &Dictionary) -> &'static str {
         match self {
-            Self::Paramount => dict.settings.themes.paramount,
+            Self::Streamovie => dict.settings.themes.streamovie,
             Self::Netflix => dict.settings.themes.netflix,
             Self::Midnight => dict.settings.themes.midnight,
             Self::Aurora => dict.settings.themes.aurora,
@@ -122,10 +124,10 @@ impl AccentPalette {
         }
     }
 
-    /// Primary accent color in HSLA matching Paramount+ / Streamovie cinema styling.
+    /// Primary accent color in HSLA matching Streamovie cinema blue (`#0064FF`).
     pub fn primary_hsla(self) -> Hsla {
         match self {
-            Self::Paramount => hsla(216.0 / 360.0, 1.0, 0.50, 1.0), // #0064ff Paramount+ Signature Blue
+            Self::Streamovie => hsla(216.0 / 360.0, 1.0, 0.50, 1.0), // #0064ff Streamovie cinema blue
             Self::Netflix => hsla(357.0 / 360.0, 0.92, 0.47, 1.0),  // #e50914
             Self::Midnight => hsla(258.0 / 360.0, 0.90, 0.66, 1.0), // #8b5cf6
             Self::Aurora => hsla(160.0 / 360.0, 0.84, 0.39, 1.0),   // #10b981
@@ -140,10 +142,10 @@ impl AccentPalette {
     pub fn dark_surfaces(self) -> (Hsla, Hsla, Hsla) {
         match self {
             // (canvas_bg, card_surface, sidebar_bg)
-            Self::Paramount => (
-                hsla(222.0 / 360.0, 0.52, 0.032, 1.0), // #040711 Paramount+ deep cinema canvas
-                hsla(220.0 / 360.0, 0.38, 0.075, 1.0), // #0a1120 Paramount+ card surface
-                hsla(224.0 / 360.0, 0.58, 0.026, 1.0), // #03050c Paramount+ vertical dock
+            Self::Streamovie => (
+                hsla(222.0 / 360.0, 0.52, 0.032, 1.0), // #040711 deep cinema canvas
+                hsla(220.0 / 360.0, 0.38, 0.075, 1.0), // #0a1120 card surface
+                hsla(224.0 / 360.0, 0.58, 0.026, 1.0), // #03050c quiet sidebar
             ),
             Self::Netflix => (
                 hsla(222.0 / 360.0, 0.42, 0.038, 1.0),

@@ -139,25 +139,44 @@ pub struct SourceLink {
 }
 
 impl SourceLink {
-    /// Checks whether the source points to a direct video stream (`mp4`, `webm`, `ogg`, `ogv`).
-    pub fn is_playable_video(&self) -> bool {
-        if self.is_trailer {
-            return false;
-        }
+    /// True when the URL looks like an HLS playlist (not supported by the in-app player).
+    pub fn is_hls(&self) -> bool {
         let lower_url = self.url.to_ascii_lowercase();
-        let has_video_ext = [".mp4", ".webm", ".ogg", ".ogv"]
-            .iter()
-            .any(|ext| lower_url.ends_with(ext) || lower_url.contains(&format!("{ext}?")));
         let combined = format!(
             "{} {}",
             self.format_type.as_deref().unwrap_or_default(),
             self.quality
         )
         .to_ascii_lowercase();
-        has_video_ext
-            || ["mp4", "webm", "ogg", "ogv"]
-                .iter()
-                .any(|fmt| combined.contains(fmt))
+        lower_url.contains(".m3u8")
+            || combined.contains("m3u8")
+            || combined.contains("hls")
+            || combined.contains("mpegurl")
+    }
+
+    /// Checks whether the source points to a progressive video file (`mp4`, `webm`, `ogg`, `ogv`).
+    /// HLS is explicitly excluded — we never claim adaptive streaming support without a real stack.
+    pub fn is_playable_video(&self) -> bool {
+        if self.is_trailer || self.is_hls() {
+            return false;
+        }
+        let lower_url = self.url.to_ascii_lowercase();
+        let path = lower_url.split('?').next().unwrap_or(&lower_url);
+        let has_video_ext = [".mp4", ".webm", ".ogg", ".ogv"]
+            .iter()
+            .any(|ext| path.ends_with(ext) || lower_url.contains(&format!("{ext}?")));
+        let combined = format!(
+            "{} {}",
+            self.format_type.as_deref().unwrap_or_default(),
+            self.quality
+        )
+        .to_ascii_lowercase();
+        let format_hints_progressive = ["mp4", "webm", "ogg", "ogv", "video/mp4", "video/webm"]
+            .iter()
+            .any(|fmt| combined.contains(fmt));
+        // Unlabeled progressive URLs: allow http(s) paths that already passed HLS exclusion
+        // only when format/quality hints progressive codecs — never invent playability for HLS.
+        has_video_ext || format_hints_progressive
     }
 }
 

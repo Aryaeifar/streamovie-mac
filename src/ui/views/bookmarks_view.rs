@@ -1,10 +1,10 @@
-//! Bookmarks / Watchlist screen completely redesigned to match Paramount+ "My List" UI/UX.
+//! Bookmarks / Watchlist screen completely redesigned to match Streamovie "My List" UI/UX.
 //!
 //! Features:
-//! - Paramount+ "MY WATCHLIST" header with item counter and subtitle
-//! - Filter tabs: "ALL TITLES" | "MOVIES" | "TV SHOWS" in Paramount+ pill styling
-//! - Paramount+ empty state with CTA to explore titles
-//! - Multi-column grid of Paramount+ poster cards with active bookmark state and hover glow
+//! - Streamovie "MY WATCHLIST" header with item counter and subtitle
+//! - Filter tabs: "ALL TITLES" | "MOVIES" | "TV SHOWS" in Streamovie pill styling
+//! - Streamovie empty state with CTA to explore titles
+//! - Multi-column grid of Streamovie poster cards with active bookmark state and hover glow
 
 use gpui_kit::{
     AnyElement, Context, IntoElement, ParentElement as _, Styled as _, div,
@@ -53,7 +53,7 @@ pub fn render_bookmarks_view(
             entry.kind,
             true,
             locale,
-            "paramount-bookmarks-grid",
+            "streamovie-bookmarks-grid",
             cx,
         ));
     }
@@ -62,7 +62,7 @@ pub fn render_bookmarks_view(
         .w_full()
         .gap_6()
         .pb_12()
-        // Paramount+ Watchlist Header Bar
+        // Streamovie Watchlist Header Bar
         .child(
             directional_row(h_flex(), rtl)
                 .w_full()
@@ -112,12 +112,12 @@ pub fn render_bookmarks_view(
                                     div()
                                         .text_xs()
                                         .text_color(cx.theme().muted_foreground)
-                                        .child("Quickly access movies and TV shows you've saved to watch on Paramount+."),
+                                        .child("Quickly access movies and TV shows you've saved to your Streamovie watchlist."),
                                 ),
                         ),
                 )
                 .child(
-                    TabBar::new("paramount-bookmarks-filter-tabs")
+                    TabBar::new("streamovie-bookmarks-filter-tabs")
                         .pill()
                         .selected_index(filter_tab.index())
                         .child(Tab::new().label("ALL TITLES"))
@@ -140,12 +140,12 @@ pub fn render_bookmarks_view(
                         )
                         .title(EmptyTitle::new().child("Your Watchlist is empty"))
                         .description(EmptyDescription::new().child(
-                            "Explore Paramount+ movies and series and click '+' to add them to your Watchlist.",
+                            "Explore Streamovie movies and series and click '+' to add them to your watchlist.",
                         )),
                 )
                 .content(
                     EmptyContent::new().child(
-                        Button::new("paramount-bookmarks-browse-cta")
+                        Button::new("streamovie-bookmarks-browse-cta")
                             .primary()
                             .large()
                             .icon(IconName::LayoutDashboard)

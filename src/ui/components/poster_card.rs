@@ -1,11 +1,7 @@
-//! Paramount+ signature media cards built on `uni-kit` (`gpui-kit`).
+//! Streamovie media cards built on `uni-kit` (`gpui-kit`).
 //!
-//! Features:
-//! - Standard 2:3 vertical poster card (`192x288`, Paramount+ catalog style)
-//! - Widescreen 16:9 landscape card (`288x162`, Paramount+ featured row style)
-//! - Crisp 8px corners matching Paramount+ UI/UX
-//! - Signature Paramount+ hover lift with 2px electric blue border and luminous glow shadow
-//! - Paramount+ "NEW EPISODE" / "EXCLUSIVE" badge, floating "+" watchlist button, and bottom branding watermark
+//! Distinct poster (2:3) and landscape (16:9) styles, quiet hover focus,
+//! bookmark action, and open-details — no third-party watermarks.
 //! - Below-poster high-contrast title and metadata caption
 
 use gpui_kit::{
@@ -28,10 +24,10 @@ use crate::{
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum PosterCardStyle {
-    /// Standard 2:3 vertical movie/series poster card (`192x288`, Paramount+ cinema style).
+    /// Standard 2:3 vertical movie/series poster card (`192x288`).
     #[default]
     Poster,
-    /// Widescreen 16:9 landscape card (`288x162`, Paramount+ featured row style).
+    /// Widescreen 16:9 landscape card (`288x162`).
     Widescreen,
 }
 
@@ -89,22 +85,22 @@ pub fn render_poster_card_with_style(
         PosterCardStyle::Poster => (px(192.), px(288.)),
         PosterCardStyle::Widescreen => (px(288.), px(162.)),
     };
-    let card_radius = px(8.); // Crisp Paramount+ 8px radius
+    let card_radius = crate::ui::theme_tokens::RADIUS;
 
     let card_id = SharedString::from(format!(
-        "paramount-card-{id_scope}-{}-{media_id}",
+        "streamovie-card-{id_scope}-{}-{media_id}",
         category.as_str()
     ));
     let bookmark_btn_id = SharedString::from(format!(
-        "paramount-bm-btn-{id_scope}-{}-{media_id}",
+        "streamovie-bm-btn-{id_scope}-{}-{media_id}",
         category.as_str()
     ));
 
     let media_for_open = media.clone();
     let media_for_bookmark = media.clone();
 
-    let primary_accent = cx.theme().primary; // #0064FF Paramount Blue
-    let card_bg = hsla(220.0 / 360.0, 0.38, 0.075, 1.0); // #0a1120
+    let primary_accent = cx.theme().primary;
+    let card_bg = hsla(220.0 / 360.0, 0.38, 0.075, 1.0);
     let subtle_border = hsla(216.0 / 360.0, 0.35, 0.85, 0.10);
 
     let default_shadow = vec![BoxShadow {
@@ -115,23 +111,14 @@ pub fn render_poster_card_with_style(
         color: hsla(222.0 / 360.0, 0.50, 0.02, 0.70),
     }];
 
-    // Signature Paramount+ luminous blue focus glow
-    let hover_shadow = vec![
-        BoxShadow {
-            offset: point(px(0.), px(10.)),
-            blur_radius: px(26.),
-            spread_radius: px(1.0),
-            inset: false,
-            color: primary_accent.opacity(0.48),
-        },
-        BoxShadow {
-            offset: point(px(0.), px(4.)),
-            blur_radius: px(12.),
-            spread_radius: px(0.),
-            inset: false,
-            color: hsla(0.0, 0.0, 0.0, 0.85),
-        },
-    ];
+    // Quiet focus: border accent without heavy glow stack
+    let hover_shadow = vec![BoxShadow {
+        offset: point(px(0.), px(8.)),
+        blur_radius: px(18.),
+        spread_radius: px(0.),
+        inset: false,
+        color: hsla(0.0, 0.0, 0.0, 0.55),
+    }];
 
     let gold_pill_bg = hsla(222.0 / 360.0, 0.50, 0.05, 0.85);
     let gold_pill_border = hsla(45.0 / 360.0, 0.95, 0.55, 0.40);
@@ -165,11 +152,10 @@ pub fn render_poster_card_with_style(
         .pb_1()
         .gap_2()
         .cursor_pointer()
-        .group("paramount-card")
+        .group("streamovie-card")
         .on_click(cx.listener(move |this, _, _, cx| {
             this.open_details(media_for_open.clone(), category, cx);
         }))
-        // Artwork Frame (Paramount+ rounded poster with scale lift + electric blue focus border & glow)
         .child(
             div()
                 .relative()
@@ -182,18 +168,14 @@ pub fn render_poster_card_with_style(
                 .border_color(subtle_border)
                 .shadow(default_shadow)
                 .overflow_hidden()
-                // Paramount+ signature hover effect: scale lift + 2px Paramount Blue border + blue glow
-                .group_hover("paramount-card", move |style| {
+                .group_hover("streamovie-card", move |style| {
                     style
-                        .mt(-px(6.))
-                        .mb(px(6.))
-                        .border_2()
+                        .mt(-px(4.))
+                        .mb(px(4.))
                         .border_color(primary_accent)
                         .shadow(hover_shadow.clone())
                 })
-                // 1. Remote Poster / Backdrop Image
                 .child(artwork)
-                // 2. Bottom Subtle Gradient Vignette
                 .child(
                     div()
                         .absolute()
@@ -205,7 +187,6 @@ pub fn render_poster_card_with_style(
                             linear_color_stop(black().opacity(0.0), 0.65),
                         )),
                 )
-                // 3. Top Floating Bar: Paramount+ "NEW EPISODE" / Rating Pill + Watchlist "+" Action
                 .child(
                     directional_row(h_flex(), rtl)
                         .absolute()
@@ -215,7 +196,6 @@ pub fn render_poster_card_with_style(
                         .justify_between()
                         .items_center()
                         .gap_1p5()
-                        // Left badge: NEW EPISODE or IMDb rating
                         .child(if category == MediaCategory::Series {
                             div()
                                 .px_1p5()
@@ -225,7 +205,7 @@ pub fn render_poster_card_with_style(
                                 .text_size(px(9.5))
                                 .font_bold()
                                 .text_color(white())
-                                .child("NEW EPISODE")
+                                .child("SERIES")
                                 .into_any_element()
                         } else if rating > 0.0 {
                             h_flex()
@@ -246,7 +226,6 @@ pub fn render_poster_card_with_style(
                         } else {
                             div().into_any_element()
                         })
-                        // Right button: Paramount+ circular "+" Watchlist button
                         .child(
                             Button::new(bookmark_btn_id)
                                 .small()
@@ -286,7 +265,6 @@ pub fn render_poster_card_with_style(
                                 })),
                         ),
                 )
-                // 4. Center Paramount+ Play Overlay on hover
                 .child(
                     div()
                         .absolute()
@@ -295,7 +273,7 @@ pub fn render_poster_card_with_style(
                         .items_center()
                         .justify_center()
                         .opacity(0.0)
-                        .group_hover("paramount-card", |s| s.opacity(1.0))
+                        .group_hover("streamovie-card", |s| s.opacity(1.0))
                         .child(
                             div()
                                 .flex()
@@ -307,17 +285,9 @@ pub fn render_poster_card_with_style(
                                 .text_color(white())
                                 .border_2()
                                 .border_color(white().opacity(0.50))
-                                .shadow(vec![BoxShadow {
-                                    offset: point(px(0.), px(4.)),
-                                    blur_radius: px(16.),
-                                    spread_radius: px(0.),
-                                    inset: false,
-                                    color: hsla(0.0, 0.0, 0.0, 0.8),
-                                }])
                                 .child(Icon::new(IconName::Play).small()),
                         ),
                 )
-                // 5. Bottom Paramount+ Watermark / In-card title
                 .child(match card_style {
                     PosterCardStyle::Widescreen => v_flex()
                         .absolute()
@@ -350,24 +320,9 @@ pub fn render_poster_card_with_style(
                                 }),
                         )
                         .into_any_element(),
-                    PosterCardStyle::Poster => div()
-                        .absolute()
-                        .left_2()
-                        .right_2()
-                        .bottom_2()
-                        .flex()
-                        .justify_center()
-                        .child(
-                            div()
-                                .text_size(px(10.))
-                                .font_extrabold()
-                                .text_color(white().opacity(0.85))
-                                .child("Paramount+"),
-                        )
-                        .into_any_element(),
+                    PosterCardStyle::Poster => div().into_any_element(),
                 }),
         )
-        // Below-Poster Paramount+ Caption (Title + Year · Genre)
         .when(card_style == PosterCardStyle::Poster, |card| {
             card.child(
                 v_flex()
@@ -382,7 +337,7 @@ pub fn render_poster_card_with_style(
                             .font_bold()
                             .line_height(relative(1.25))
                             .text_color(cx.theme().foreground)
-                            .group_hover("paramount-card", move |s| s.text_color(primary_accent))
+                            .group_hover("streamovie-card", move |s| s.text_color(primary_accent))
                             .whitespace_nowrap()
                             .overflow_hidden()
                             .text_ellipsis()

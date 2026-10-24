@@ -1,9 +1,9 @@
-//! Search screen completely redesigned to match Paramount+ Search UI/UX.
+//! Search screen completely redesigned to match Streamovie Search UI/UX.
 //!
 //! Features:
-//! - Paramount+ high-impact search hero header with category filter pills
-//! - Sleek dark glass input with Paramount Blue focus glow and clean button
-//! - Instant results counter and responsive multi-column grid of Paramount+ poster cards
+//! - Streamovie high-impact search hero header with category filter pills
+//! - Sleek dark glass input with Streamovie blue focus glow and clean button
+//! - Instant results counter and responsive multi-column grid of Streamovie poster cards
 
 use gpui_kit::{
     AnyElement, Context, IntoElement, ParentElement as _, Styled as _, div,
@@ -54,7 +54,7 @@ pub fn render_search_view(
             kind,
             app.is_bookmarked(media.id),
             locale,
-            "paramount-search-results",
+            "streamovie-search-results",
             cx,
         ));
     }
@@ -63,7 +63,7 @@ pub fn render_search_view(
         .w_full()
         .gap_6()
         .pb_12()
-        // Paramount+ Search Panel
+        // Streamovie Search Panel
         .child(
             v_flex()
                 .w_full()
@@ -122,13 +122,13 @@ pub fn render_search_view(
                                             div()
                                                 .text_xs()
                                                 .text_color(cx.theme().muted_foreground)
-                                                .child("Search by title, character, actor, or genre across Paramount+."),
+                                                .child("Search by title, character, actor, or genre across the Streamovie catalog."),
                                         ),
                                 ),
                         )
                         // Filter Pills: ALL | MOVIES | TV SHOWS
                         .child(
-                            TabBar::new("paramount-search-filter-tabs")
+                            TabBar::new("streamovie-search-filter-tabs")
                                 .pill()
                                 .selected_index(search.filter_tab.index())
                                 .child(Tab::new().label("ALL"))
@@ -157,7 +157,7 @@ pub fn render_search_view(
                             ),
                         )
                         .child(
-                            Button::new("paramount-search-submit-btn")
+                            Button::new("streamovie-search-submit-btn")
                                 .primary()
                                 .large()
                                 .loading(search.loading)
@@ -178,7 +178,7 @@ pub fn render_search_view(
                     .child(Alert::error("search-error-banner", err).title(dict.search.failed))
                     .child(
                         directional_row(h_flex(), rtl).child(
-                            Button::new("paramount-search-retry-btn")
+                            Button::new("streamovie-search-retry-btn")
                                 .small()
                                 .outline()
                                 .icon(IconName::RefreshCw)
@@ -203,7 +203,7 @@ pub fn render_search_view(
                     div()
                         .text_sm()
                         .text_color(cx.theme().muted_foreground)
-                        .child("Searching the Paramount+ catalog..."),
+                        .child("Searching the Streamovie catalog…"),
                 )
                 .into_any_element()
         } else if search.query.trim().is_empty() {

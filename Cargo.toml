@@ -32,6 +32,11 @@ smol = "2.0"
 tracing = "0.1"
 urlencoding = "2.1"
 
+# macOS in-app AVKit player (cfg-gated in src/player/). Linux/CI uses the stub backend.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", features = ["NSURL", "NSString", "NSGeometry"] }
+
 [profile.dev]
 codegen-units = 16
 debug = "limited"

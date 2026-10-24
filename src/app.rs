@@ -1,18 +1,19 @@
 //! Root GPUI application view (`StreamovieApp`) combining `uni-kit`'s `TitleBar`,
-//! a Netflix + Linear vertical dark sidebar (`Home`, `Movies`, `Series`, `Search`,
-//! `Bookmarks`, `Settings`), top glassmorphic toolbar, `ImageCache` remote image loader,
-//! horizontal `ScrollHandle` carousels, and reactive async data loading for Streamovie + OMDb.
+//! a quiet Streamovie sidebar (`Home`, `Movies`, `Series`, `Search`, `Bookmarks`,
+//! `Settings`), top toolbar, `ImageCache` remote image loader, in-app AVKit player,
+//! episode downloads, horizontal `ScrollHandle` carousels, and reactive async data
+//! loading for Streamovie + OMDb.
 
 use std::sync::Arc;
 
 use gpui_kit::{
-    AnyElement, App, AppContext as _, BoxShadow, Context, Entity, Image, InteractiveElement as _,
+    AnyElement, App, AppContext as _, Context, Entity, Image, InteractiveElement as _,
     IntoElement, ParentElement as _, Render, ScrollHandle, SharedString,
     StatefulInteractiveElement as _, Styled as _, Subscription, Window, div, hsla, point,
     prelude::FluentBuilder as _, px, white,
 };
 use gpui_kit::component::{
-    ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt as _, TitleBar,
+    ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt as _, TitleBar, WindowExt as _,
     button::Button,
     h_flex,
     input::{Input, InputEvent, InputState},
@@ -26,14 +27,17 @@ use crate::{
     api::{OmdbClient, StreamovieClient},
     config::AppConfig,
     i18n::{Locale, directional_row},
-    models::{ApiGenre, ApiMedia, BrowseSort, LibraryStoreData, MediaCategory, SavedMediaEntry},
+    models::{
+        ApiGenre, ApiMedia, BrowseSort, LibraryStoreData, MediaCategory, SavedMediaEntry, SourceLink,
+    },
+    player::{self, PlayerSession},
     state::{
         CatalogGridState, CatalogMetadataState, DetailsState, HomeFeedState, MediaFilterTab,
         NavSection, SearchState,
     },
     storage::{
-        AccentPalette, BookmarkStorage, PersistedSettings, SettingsStorage, ThemeModePreference,
-        app_data_dir,
+        AccentPalette, BookmarkStorage, DownloadManager, DownloadStatus, PersistedSettings,
+        SettingsStorage, ThemeModePreference, app_data_dir,
     },
     ui::{
         image_cache::ImageCache,
@@ -69,6 +73,8 @@ pub struct StreamovieApp {
 
     bookmarks_filter_tab: MediaFilterTab,
     active_details: Option<DetailsState>,
+    active_player: Option<PlayerSession>,
+    download_manager: DownloadManager,
 
     _subscriptions: Vec<Subscription>,
 }
@@ -145,6 +151,8 @@ impl StreamovieApp {
             search_input,
             bookmarks_filter_tab: MediaFilterTab::All,
             active_details: None,
+            active_player: None,
+            download_manager: DownloadManager::new(),
             _subscriptions: vec![search_sub],
         };
 
@@ -163,6 +171,7 @@ impl StreamovieApp {
 
     // --- Accessors for Views ---
 
+    #[allow(dead_code)]
     pub fn config(&self) -> &AppConfig {
         &self.config
     }
@@ -730,6 +739,147 @@ impl StreamovieApp {
         cx.notify();
     }
 
+    // --- In-app player (AVKit on macOS) ---
+
+    #[allow(dead_code)]
+    pub fn active_player(&self) -> Option<&PlayerSession> {
+        self.active_player.as_ref()
+    }
+
+    pub fn play_source(
+        &mut self,
+        title: impl Into<String>,
+        source: SourceLink,
+        media_id: u64,
+        episode_key: Option<String>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let title = title.into();
+        let session = PlayerSession::new(title.clone(), source, media_id, episode_key);
+        match player::play_session(&session) {
+            Ok(()) => {
+                self.active_player = Some(session);
+                cx.notify();
+            }
+            Err(err) => {
+                let msg = err.user_message();
+                window.push_notification(
+                    format!("{}: {msg}", self.locale().dict().actions.playback_failed),
+                    cx,
+                );
+                cx.notify();
+            }
+        }
+    }
+
+    pub fn play_best_source(
+        &mut self,
+        title: impl Into<String>,
+        sources: &[SourceLink],
+        media_id: u64,
+        episode_key: Option<String>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let title = title.into();
+        if let Some(hls) = sources.iter().find(|s| !s.is_trailer && s.is_hls()) {
+            if player::best_playable_source(sources).is_none() {
+                let _ = hls;
+                window.push_notification(
+                    player::PlayerError::HlsUnsupported.user_message(),
+                    cx,
+                );
+                return;
+            }
+        }
+        match player::best_playable_source(sources).cloned() {
+            Some(source) => self.play_source(title, source, media_id, episode_key, window, cx),
+            None => {
+                window.push_notification(
+                    player::PlayerError::NotPlayable.user_message(),
+                    cx,
+                );
+            }
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn close_player(&mut self, cx: &mut Context<Self>) {
+        self.active_player = None;
+        cx.notify();
+    }
+
+    pub fn open_source_externally(&self, url: &str, window: &mut Window, cx: &mut Context<Self>) {
+        if let Err(err) = player::open_externally(url) {
+            window.push_notification(err.user_message(), cx);
+        }
+    }
+
+    // --- Episode / source downloads ---
+
+    #[allow(dead_code)]
+    pub fn download_manager(&self) -> &DownloadManager {
+        &self.download_manager
+    }
+
+    pub fn download_status(&self, key: &str) -> DownloadStatus {
+        self.download_manager.status(key)
+    }
+
+    pub fn start_download(
+        &mut self,
+        key: impl Into<String>,
+        source: &SourceLink,
+        suggested_name: impl Into<String>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let key = key.into();
+        let suggested_name = suggested_name.into();
+        let dict = self.locale().dict();
+        match self
+            .download_manager
+            .start_download(key.clone(), source.url.clone(), suggested_name)
+        {
+            Ok(()) => {
+                window.push_notification(dict.actions.download_started, cx);
+                // Poll progress so UI refreshes while the background thread runs.
+                let poll_key = key;
+                cx.spawn(async move |this, cx| {
+                    for _ in 0..600 {
+                        cx.background_executor()
+                            .spawn(async {
+                                smol::Timer::after(std::time::Duration::from_millis(250)).await;
+                            })
+                            .await;
+                        let done = this
+                            .update(cx, |this, cx| {
+                                let status = this.download_manager.status(&poll_key);
+                                cx.notify();
+                                matches!(
+                                    status,
+                                    DownloadStatus::Done { .. } | DownloadStatus::Failed { .. }
+                                )
+                            })
+                            .unwrap_or(true);
+                        if done {
+                            break;
+                        }
+                    }
+                })
+                .detach();
+            }
+            Err(err) => {
+                window.push_notification(
+                    format!("{}: {err}", dict.actions.download_failed),
+                    cx,
+                );
+            }
+        }
+        cx.notify();
+    }
+
     pub fn select_season(&mut self, season_index: usize, cx: &mut Context<Self>) {
         let Some(details) = self.active_details.as_mut() else {
             return;
@@ -803,9 +953,9 @@ impl StreamovieApp {
         .detach();
     }
 
-    // --- Paramount+ Left Dock Navigation ---
+    // --- Streamovie Left Dock Navigation ---
 
-    fn render_paramount_nav_row(&self, item: NavSection, cx: &mut Context<Self>) -> AnyElement {
+    fn render_nav_row(&self, item: NavSection, cx: &mut Context<Self>) -> AnyElement {
         let locale = self.locale();
         let dict = locale.dict();
         let rtl = locale.is_rtl();
@@ -813,13 +963,13 @@ impl StreamovieApp {
         let is_active = self.active_details.is_none() && self.section == item;
         let bookmark_count = self.library.watchlist.len();
 
-        let primary = cx.theme().primary; // #0064FF Paramount Blue
-        let active_bg = primary.opacity(0.18);
-        let hover_bg = hsla(216.0 / 360.0, 0.40, 0.85, 0.08);
+        let primary = cx.theme().primary;
+        let active_bg = primary.opacity(0.14);
+        let hover_bg = hsla(216.0 / 360.0, 0.40, 0.85, 0.06);
         let fg_active = white();
         let fg_muted = hsla(215.0 / 360.0, 0.18, 0.70, 1.0);
 
-        let row_id = SharedString::from(format!("paramount-nav-{}", item.label(dict)));
+        let row_id = SharedString::from(format!("streamovie-nav-{}", item.label(dict)));
 
         div()
             .id(row_id)
@@ -834,25 +984,18 @@ impl StreamovieApp {
             .on_click(cx.listener(move |this, _, _, cx| {
                 this.select_section(item, cx);
             }))
-            // Paramount+ vertical active indicator bar with luminous blue glow
+            // Quiet active indicator — no glow stack
             .when(is_active, |el| {
                 el.child(
                     div()
                         .absolute()
-                        .top(px(8.))
-                        .bottom(px(8.))
+                        .top(px(10.))
+                        .bottom(px(10.))
                         .when(!rtl, |bar| bar.left_0())
                         .when(rtl, |bar| bar.right_0())
-                        .w(px(3.5))
+                        .w(px(3.))
                         .rounded_full()
-                        .bg(primary)
-                        .shadow(vec![BoxShadow {
-                            offset: point(px(0.), px(0.)),
-                            blur_radius: px(10.),
-                            spread_radius: px(1.),
-                            inset: false,
-                            color: primary.opacity(0.85),
-                        }]),
+                        .bg(primary),
                 )
             })
             .child(
@@ -897,13 +1040,6 @@ impl StreamovieApp {
                                     .text_xs()
                                     .font_bold()
                                     .text_color(white())
-                                    .shadow(vec![BoxShadow {
-                                        offset: point(px(0.), px(2.)),
-                                        blur_radius: px(6.),
-                                        spread_radius: px(0.),
-                                        inset: false,
-                                        color: primary.opacity(0.60),
-                                    }])
                                     .child(bookmark_count.to_string()),
                             )
                         },
@@ -918,7 +1054,7 @@ impl StreamovieApp {
         let rtl = locale.is_rtl();
         let collapsed = self.sidebar_collapsed;
 
-        // Paramount+ ordered navigation: Search, Home, Series, Movies
+        // Explore: Search, Home, Series, Movies — Library: Bookmarks, Settings
         let primary_items = [
             NavSection::Search,
             NavSection::Home,
@@ -927,13 +1063,13 @@ impl StreamovieApp {
         ];
         let mut primary_rows = Vec::with_capacity(primary_items.len());
         for sec in primary_items {
-            primary_rows.push(self.render_paramount_nav_row(sec, cx));
+            primary_rows.push(self.render_nav_row(sec, cx));
         }
 
         let library_items = [NavSection::Bookmarks, NavSection::Settings];
         let mut library_rows = Vec::with_capacity(library_items.len());
         for sec in library_items {
-            library_rows.push(self.render_paramount_nav_row(sec, cx));
+            library_rows.push(self.render_nav_row(sec, cx));
         }
 
         let sidebar_width = if collapsed { px(72.) } else { px(240.) };
@@ -953,7 +1089,7 @@ impl StreamovieApp {
                 v_flex()
                     .w_full()
                     .gap_5()
-                    // Paramount+ Brand Header
+                    // Streamovie wordmark
                     .child(
                         directional_row(h_flex(), rtl)
                             .w_full()
@@ -972,13 +1108,6 @@ impl StreamovieApp {
                                     .rounded(px(8.))
                                     .bg(cx.theme().primary)
                                     .text_color(white())
-                                    .shadow(vec![BoxShadow {
-                                        offset: point(px(0.), px(4.)),
-                                        blur_radius: px(14.),
-                                        spread_radius: px(0.),
-                                        inset: false,
-                                        color: cx.theme().primary.opacity(0.60),
-                                    }])
                                     .child(Icon::new(IconName::Play)),
                             )
                             .when(!collapsed, |row| {
@@ -992,14 +1121,13 @@ impl StreamovieApp {
                                                 .text_base()
                                                 .font_extrabold()
                                                 .text_color(cx.theme().foreground)
-                                                .child("PARAMOUNT+"),
+                                                .child(locale.dict().brand.name),
                                         )
                                         .child(
                                             div()
                                                 .text_xs()
-                                                .font_bold()
-                                                .text_color(cx.theme().primary)
-                                                .child("STREAMOVIE"),
+                                                .text_color(cx.theme().muted_foreground)
+                                                .child(locale.dict().brand.tagline),
                                         ),
                                 )
                             }),
@@ -1082,10 +1210,10 @@ impl StreamovieApp {
                             )
                             .when(!collapsed, |r| {
                                 r.child(
-                                    Tag::primary()
+                                    Tag::secondary()
                                         .small()
                                         .outline()
-                                        .child("Paramount+"),
+                                        .child(locale.short_badge()),
                                 )
                             }),
                     ),
@@ -1151,18 +1279,28 @@ impl StreamovieApp {
                             .child(active_title),
                     ),
             )
-            // Center cluster: Paramount+ Quick Search Input
+            // Center: global search (enlarged on Search section)
             .child(
-                div().w(px(360.)).child(
-                    Input::new(&self.search_input)
-                        .small()
-                        .cleanable(true)
-                        .prefix(
-                            Icon::new(IconName::Search)
-                                .small()
-                                .text_color(cx.theme().primary),
-                        ),
-                ),
+                div()
+                    .w(if self.section == NavSection::Search && self.active_details.is_none() {
+                        px(480.)
+                    } else {
+                        px(360.)
+                    })
+                    .child(
+                        Input::new(&self.search_input)
+                            .when(
+                                self.section == NavSection::Search && self.active_details.is_none(),
+                                |input| input,
+                            )
+                            .small()
+                            .cleanable(true)
+                            .prefix(
+                                Icon::new(IconName::Search)
+                                    .small()
+                                    .text_color(cx.theme().primary),
+                            ),
+                    ),
             )
             // Right/End cluster: Refresh, EN/FA Language Toggle, Theme Mode Cycle
             .child(
@@ -1170,7 +1308,7 @@ impl StreamovieApp {
                     .items_center()
                     .gap_2()
                     .child(
-                        Button::new("paramount-toolbar-refresh")
+                        Button::new("streamovie-toolbar-refresh")
                             .small()
                             .outline()
                             .icon(IconName::RefreshCw)
@@ -1182,7 +1320,7 @@ impl StreamovieApp {
                             })),
                     )
                     .child(
-                        Button::new("paramount-toolbar-locale")
+                        Button::new("streamovie-toolbar-locale")
                             .small()
                             .outline()
                             .icon(IconName::Globe)
@@ -1192,7 +1330,7 @@ impl StreamovieApp {
                             })),
                     )
                     .child(
-                        Button::new("paramount-toolbar-theme-mode")
+                        Button::new("streamovie-toolbar-theme-mode")
                             .small()
                             .outline()
                             .icon(mode_icon)
@@ -1258,7 +1396,7 @@ impl Render for StreamovieApp {
                                             div()
                                                 .text_xs()
                                                 .text_color(cx.theme().muted_foreground)
-                                                .child("· Paramount+ Cinema Edition"),
+                                                .child(dict.brand.tagline),
                                         ),
                                 )
                                 .child(

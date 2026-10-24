@@ -1,7 +1,8 @@
 //! Native `uni-kit` Settings view following the `SettingsBlock` pattern from
 //! `uni-kit/crates/blocks/src/settings.rs`.
-//! Supports Light / Dark / System theme mode, Streamovie's 7 brand accent palettes,
-//! English / Persian (RTL) language switching, and API/storage inspection.
+//! Supports Light / Dark / System theme mode, Streamovie brand accent palettes,
+//! English / Persian (RTL) language switching, and local storage inspection.
+//! Catalog/API keys remain in `.env` / `AppConfig` — not editable here.
 
 use gpui_kit::{
     App, Context, IntoElement, ParentElement as _, SharedString, Styled as _, div,
@@ -93,14 +94,6 @@ pub fn render_settings_view(
         )
     };
 
-    let primary_host = app
-        .config()
-        .api_hosts()
-        .first()
-        .cloned()
-        .unwrap_or_default();
-    let catalog_key = app.config().streamovie_api_key().to_string();
-    let omdb_key = app.config().omdb_api_key().to_string();
     let storage_dir = app.storage_dir_display();
     let rtl_status_text = dict.settings.rtl_status;
 
@@ -133,34 +126,6 @@ pub fn render_settings_view(
                                         .outline()
                                         .child(if rtl { "RTL · فارسی" } else { "LTR · English" }),
                                 )
-                                .into_any_element()
-                        }),
-                    ]),
-                SettingGroup::new()
-                    .title(dict.settings.api_group)
-                    .items(vec![
-                        SettingItem::render(move |_, _, _| {
-                            directional_row(h_flex(), rtl)
-                                .w_full()
-                                .justify_between()
-                                .child(div().text_sm().child(dict.settings.catalog_host_label))
-                                .child(Tag::secondary().small().outline().child(primary_host.clone()))
-                                .into_any_element()
-                        }),
-                        SettingItem::render(move |_, _, _| {
-                            directional_row(h_flex(), rtl)
-                                .w_full()
-                                .justify_between()
-                                .child(div().text_sm().child(dict.settings.catalog_key_label))
-                                .child(Tag::success().small().outline().child(catalog_key.clone()))
-                                .into_any_element()
-                        }),
-                        SettingItem::render(move |_, _, _| {
-                            directional_row(h_flex(), rtl)
-                                .w_full()
-                                .justify_between()
-                                .child(div().text_sm().child(dict.settings.omdb_key_label))
-                                .child(Tag::info().small().outline().child(omdb_key.clone()))
                                 .into_any_element()
                         }),
                     ]),

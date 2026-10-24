@@ -1,14 +1,8 @@
-//! Paramount+ signature widescreen Spotlight Hero stage.
+//! Streamovie cinematic Spotlight Hero stage.
 //!
-//! Visual language matches Paramount+ desktop & TV experience:
-//! - Full-bleed cinematic backdrop with dual feathered gradient scrims (directional left-to-right
-//!   + bottom vignette) so character art on the right stays vibrant while text on the left is razor-sharp
-//! - Top-right "Paramount+ ORIGINAL" watermark emblem
-//! - Neon cyan status kicker ("NOW STREAMING" / "ALL EPISODES NOW STREAMING")
-//! - High-impact display typography for title
-//! - Clean metadata row: GENRE · SEASONS · YEAR · TV-MA · 4K UHD · ★ IMDb score
-//! - Primary electric Paramount Blue ("#0064FF") CTA button ("▶ WATCH NOW") + Watchlist "+" button + Details button
-//! - Interactive widescreen spotlight preview strip with luminous Paramount Blue active highlight and smooth navigation
+//! Full-bleed backdrop, quiet Streamovie watermark, status kicker, display title,
+//! metadata row, Watch Now → in-app player when playable sources exist (else details),
+//! and an interactive spotlight thumbnail strip.
 
 use gpui_kit::{
     AnyElement, BoxShadow, Context, InteractiveElement as _, IntoElement, ParentElement as _,
@@ -86,13 +80,15 @@ pub fn render_hero_banner(
     let overview_rtl = overview.as_deref().map(is_persian_text).unwrap_or(rtl);
 
     let hero_radius = px(14.);
-    let primary_accent = cx.theme().primary; // #0064FF Paramount Blue
-    let ink_dark = hsla(222.0 / 360.0, 0.52, 0.032, 1.0); // #040711
-    let cyan_kicker = hsla(188.0 / 360.0, 1.0, 0.52, 1.0); // #00E5FF Paramount cyan
-    let gold_text = hsla(45.0 / 360.0, 0.96, 0.64, 1.0);
-    let gold_bg = hsla(45.0 / 360.0, 0.95, 0.50, 0.20);
-    let gold_border = hsla(45.0 / 360.0, 0.95, 0.55, 0.45);
-    let glass_pill_bg = hsla(220.0 / 360.0, 0.35, 0.08, 0.70);
+    let primary_accent = cx.theme().primary;
+    let ink_dark = crate::ui::theme_tokens::canvas();
+    let cyan_kicker = crate::ui::theme_tokens::status_cyan();
+    let gold_text = crate::ui::theme_tokens::rating_gold();
+    let gold_bg = crate::ui::theme_tokens::rating_gold_bg();
+    let gold_border = crate::ui::theme_tokens::rating_gold_border();
+    let glass_pill_bg = crate::ui::theme_tokens::glass_pill();
+    let playable_sources = media.source_links();
+    let has_playable = crate::player::best_playable_source(&playable_sources).is_some();
 
     let backdrop_element = render_remote_image(
         app,
@@ -104,7 +100,7 @@ pub fn render_hero_banner(
         cx,
     );
 
-    // Build interactive Paramount+ Spotlight Thumbnail Strip
+    // Spotlight thumbnail strip
     let mut thumb_cards = Vec::with_capacity(items.len());
     for (ix, entry) in items.iter().take(6).enumerate() {
         let is_active = ix == active_index;
@@ -132,7 +128,7 @@ pub fn render_hero_banner(
             cx,
         );
 
-        let thumb_id = SharedString::from(format!("paramount-hero-thumb-{ix}"));
+        let thumb_id = SharedString::from(format!("streamovie-hero-thumb-{ix}"));
         thumb_cards.push(
             v_flex()
                 .id(thumb_id)
@@ -247,7 +243,7 @@ pub fn render_hero_banner(
                     linear_color_stop(ink_dark.opacity(0.0), 0.70),
                 )),
         )
-        // 4. Paramount+ Top-Right Signature Watermark Logo
+        // 4. Quiet Streamovie watermark
         .child(
             directional_row(h_flex(), rtl)
                 .absolute()
@@ -267,18 +263,7 @@ pub fn render_hero_banner(
                         .text_size(px(13.))
                         .font_extrabold()
                         .text_color(white())
-                        .child("Paramount+"),
-                )
-                .child(
-                    div()
-                        .px_1p5()
-                        .py_0p5()
-                        .rounded(px(3.))
-                        .bg(primary_accent)
-                        .text_size(px(9.5))
-                        .font_bold()
-                        .text_color(white())
-                        .child("ORIGINAL"),
+                        .child(dict.brand.name),
                 ),
         )
         // 5. Foreground Content Layer
@@ -289,13 +274,13 @@ pub fn render_hero_banner(
                 .p_8()
                 .justify_between()
                 .when(rtl, |col| col.items_end())
-                // Upper / Middle Paramount+ Hero Copy & Actions
+                // Hero copy & actions
                 .child(
                     v_flex()
                         .max_w(px(720.))
                         .gap_3p5()
                         .when(rtl, |col| col.items_end().text_right())
-                        // Status Kicker (Paramount+ Neon Cyan: "ALL EPISODES NOW STREAMING")
+                        // Status kicker
                         .child(
                             directional_row(h_flex(), rtl)
                                 .items_center()
@@ -311,10 +296,14 @@ pub fn render_hero_banner(
                                         .text_xs()
                                         .font_extrabold()
                                         .text_color(cyan_kicker)
-                                        .child("ALL EPISODES NOW STREAMING"),
+                                        .child(if has_playable {
+                                            "NOW STREAMING"
+                                        } else {
+                                            "NOW ON STREAMOVIE"
+                                        }),
                                 ),
                         )
-                        // Giant Display Title (Paramount+ bold cinema typography)
+                        // Display title
                         .child(
                             div()
                                 .text_size(px(46.))
@@ -324,7 +313,7 @@ pub fn render_hero_banner(
                                 .when(title_rtl, |el| el.text_right())
                                 .child(title),
                         )
-                        // Paramount+ Metadata Row: GENRE · SEASONS · YEAR · TV-MA · 4K UHD · ★ IMDb
+                        // Metadata row
                         .child(
                             directional_row(h_flex(), rtl)
                                 .flex_wrap()
@@ -412,30 +401,42 @@ pub fn render_hero_banner(
                                     .child(text),
                             )
                         })
-                        // Primary CTA Buttons (Paramount+ solid blue watch button + glass + watchlist)
+                        // Primary CTAs: Watch Now → player when playable, else details
                         .child(
                             directional_row(h_flex(), rtl)
                                 .pt_2()
                                 .items_center()
                                 .gap_3()
-                                // Paramount+ Primary Watch Now CTA
                                 .child(
-                                    Button::new("paramount-watch-now")
+                                    Button::new("streamovie-watch-now")
                                         .primary()
                                         .large()
                                         .icon(IconName::Play)
                                         .label(dict.actions.watch_now.to_uppercase())
-                                        .on_click(cx.listener(move |this, _, _, cx| {
-                                            this.open_details(
-                                                media_for_watch.clone(),
-                                                category,
-                                                cx,
-                                            );
+                                        .on_click(cx.listener(move |this, _, window, cx| {
+                                            let sources = media_for_watch.source_links();
+                                            if crate::player::best_playable_source(&sources)
+                                                .is_some()
+                                            {
+                                                this.play_best_source(
+                                                    media_for_watch.display_title(),
+                                                    &sources,
+                                                    media_for_watch.id,
+                                                    None,
+                                                    window,
+                                                    cx,
+                                                );
+                                            } else {
+                                                this.open_details(
+                                                    media_for_watch.clone(),
+                                                    category,
+                                                    cx,
+                                                );
+                                            }
                                         })),
                                 )
-                                // Watchlist "+" Button
                                 .child(
-                                    Button::new("paramount-watchlist-btn")
+                                    Button::new("streamovie-watchlist-btn")
                                         .large()
                                         .outline()
                                         .selected(bookmarked)
@@ -463,9 +464,8 @@ pub fn render_hero_banner(
                                             window.push_notification(notice, cx);
                                         })),
                                 )
-                                // More Details Button
                                 .child(
-                                    Button::new("paramount-details-btn")
+                                    Button::new("streamovie-details-btn")
                                         .large()
                                         .outline()
                                         .icon(IconName::Info)
@@ -478,9 +478,8 @@ pub fn render_hero_banner(
                                             );
                                         })),
                                 )
-                                // Like Button
                                 .child(
-                                    Button::new("paramount-like-btn")
+                                    Button::new("streamovie-like-btn")
                                         .large()
                                         .ghost()
                                         .selected(liked)
@@ -494,9 +493,9 @@ pub fn render_hero_banner(
                                             this.toggle_like(media_id, cx);
                                         })),
                                 ),
-                        ),
+                        )
                 )
-                // Bottom Strip: Paramount+ Spotlight Carousel Thumbnails + Arrows
+                // Spotlight strip
                 .child(
                     directional_row(h_flex(), rtl)
                         .w_full()
@@ -513,7 +512,7 @@ pub fn render_hero_banner(
                             directional_row(h_flex(), rtl)
                                 .gap_2()
                                 .child(
-                                    Button::new("paramount-hero-prev")
+                                    Button::new("streamovie-hero-prev")
                                         .small()
                                         .outline()
                                         .icon(if rtl {
@@ -527,7 +526,7 @@ pub fn render_hero_banner(
                                         })),
                                 )
                                 .child(
-                                    Button::new("paramount-hero-next")
+                                    Button::new("streamovie-hero-next")
                                         .small()
                                         .outline()
                                         .icon(if rtl {
