@@ -1,0 +1,63 @@
+name: macOS build
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build release
+        run: cargo build --release
+
+      - name: Package Streamovie.app
+        run: |
+          set -euo pipefail
+          APP="Streamovie.app"
+          mkdir -p "$APP/Contents/MacOS"
+          cp target/release/streamovie-mac "$APP/Contents/MacOS/streamovie-mac"
+          chmod +x "$APP/Contents/MacOS/streamovie-mac"
+          cat > "$APP/Contents/Info.plist" <<'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleName</key>
+            <string>Streamovie</string>
+            <key>CFBundleDisplayName</key>
+            <string>Streamovie</string>
+            <key>CFBundleIdentifier</key>
+            <string>com.streamovie.mac</string>
+            <key>CFBundleVersion</key>
+            <string>0.1.0</string>
+            <key>CFBundleShortVersionString</key>
+            <string>0.1.0</string>
+            <key>CFBundleExecutable</key>
+            <string>streamovie-mac</string>
+            <key>CFBundlePackageType</key>
+            <string>APPL</string>
+            <key>LSMinimumSystemVersion</key>
+            <string>13.0</string>
+            <key>NSHighResolutionCapable</key>
+            <true/>
+          </dict>
+          </plist>
+          EOF
+          ditto -c -k --keepParent "$APP" Streamovie-mac.zip
+
+      - name: Upload build
+        uses: actions/upload-artifact@v4
+        with:
+          name: Streamovie-mac
+          path: Streamovie-mac.zip
+          if-no-files-found: error
