@@ -53,11 +53,19 @@ jobs:
           </dict>
           </plist>
           EOF
-          ditto -c -k --keepParent "$APP" Streamovie-mac.zip
+          STAGE="$(mktemp -d)"
+          cp -R "$APP" "$STAGE/"
+          ln -s /Applications "$STAGE/Applications"
+          hdiutil create \
+            -volname "Streamovie" \
+            -srcfolder "$STAGE" \
+            -ov \
+            -format UDZO \
+            "Streamovie-mac.dmg"
 
       - name: Upload build
         uses: actions/upload-artifact@v4
         with:
           name: Streamovie-mac
-          path: Streamovie-mac.zip
+          path: Streamovie-mac.dmg
           if-no-files-found: error
