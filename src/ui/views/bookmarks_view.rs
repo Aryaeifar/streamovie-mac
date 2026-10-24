@@ -1,26 +1,17 @@
-//! Bookmarks / Watchlist screen completely redesigned to match Paramount+ "My List" UI/UX.
-//!
-//! Features:
-//! - Paramount+ "MY WATCHLIST" header with item counter and subtitle
-//! - Filter tabs: "ALL TITLES" | "MOVIES" | "TV SHOWS" in Paramount+ pill styling
-//! - Paramount+ empty state with CTA to explore titles
-//! - Multi-column grid of Paramount+ poster cards with active bookmark state and hover glow
+//! Local watchlist.
 
-use gpui_kit::{
-    AnyElement, Context, IntoElement, ParentElement as _, Styled as _, div,
-    prelude::FluentBuilder as _, px,
-};
 use gpui_kit::component::{
-    ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt as _,
+    ActiveTheme as _, Icon, IconName, Selectable as _, Sizable as _, StyledExt as _,
     button::{Button, ButtonVariants as _},
     empty::{
         Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyMediaVariant,
         EmptyTitle,
     },
-    h_flex,
-    tab::{Tab, TabBar},
-    tag::Tag,
-    v_flex,
+    h_flex, v_flex,
+};
+use gpui_kit::{
+    AnyElement, Context, IntoElement, ParentElement as _, Styled as _, div,
+    prelude::FluentBuilder as _,
 };
 
 use crate::{
@@ -30,105 +21,83 @@ use crate::{
     ui::components::render_poster_card,
 };
 
-pub fn render_bookmarks_view(
-    app: &StreamovieApp,
-    cx: &mut Context<StreamovieApp>,
-) -> AnyElement {
+pub fn render_bookmarks_view(app: &StreamovieApp, cx: &mut Context<StreamovieApp>) -> AnyElement {
     let locale = app.locale();
     let dict = locale.dict();
     let rtl = locale.is_rtl();
     let filter_tab = app.bookmarks_filter_tab();
-
-    let all_bookmarks = app.ordered_bookmarks();
-    let filtered: Vec<_> = all_bookmarks
+    let filtered: Vec<_> = app
+        .ordered_bookmarks()
         .into_iter()
         .filter(|entry| filter_tab.matches(entry.kind))
         .collect();
 
-    let mut cards = Vec::with_capacity(filtered.len());
-    for entry in &filtered {
-        cards.push(render_poster_card(
-            app,
-            &entry.media,
-            entry.kind,
-            true,
-            locale,
-            "paramount-bookmarks-grid",
-            cx,
-        ));
-    }
+    let cards: Vec<_> = filtered
+        .iter()
+        .map(|entry| {
+            render_poster_card(app, &entry.media, entry.kind, true, locale, "watchlist", cx)
+        })
+        .collect();
 
     v_flex()
         .w_full()
-        .gap_6()
+        .px_8()
+        .pt_6()
         .pb_12()
-        // Paramount+ Watchlist Header Bar
+        .gap_5()
         .child(
             directional_row(h_flex(), rtl)
                 .w_full()
-                .p_5()
-                .rounded(px(10.))
-                .border_1()
-                .border_color(cx.theme().border)
-                .bg(cx.theme().popover)
                 .justify_between()
-                .items_center()
-                .flex_wrap()
-                .gap_4()
+                .items_end()
                 .child(
-                    directional_row(h_flex(), rtl)
-                        .items_center()
-                        .gap_3()
+                    v_flex()
+                        .gap_1()
+                        .when(rtl, |col| col.items_end().text_right())
+                        .child(div().text_2xl().font_semibold().child(dict.bookmarks.title))
                         .child(
                             div()
-                                .w(px(3.5))
-                                .h(px(26.))
-                                .rounded_full()
-                                .bg(cx.theme().primary),
-                        )
-                        .child(
-                            v_flex()
-                                .gap_0p5()
-                                .when(rtl, |this| this.items_end().text_right())
-                                .child(
-                                    directional_row(h_flex(), rtl)
-                                        .items_center()
-                                        .gap_3()
-                                        .child(
-                                            div()
-                                                .text_2xl()
-                                                .font_extrabold()
-                                                .child("MY WATCHLIST"),
-                                        )
-                                        .child(
-                                            Tag::primary().small().outline().child(format_count(
-                                                dict.bookmarks.saved_count,
-                                                filtered.len(),
-                                                locale,
-                                            )),
-                                        ),
-                                )
-                                .child(
-                                    div()
-                                        .text_xs()
-                                        .text_color(cx.theme().muted_foreground)
-                                        .child("Quickly access movies and TV shows you've saved to watch on Paramount+."),
-                                ),
+                                .text_sm()
+                                .text_color(cx.theme().muted_foreground)
+                                .child(dict.bookmarks.subtitle),
                         ),
                 )
                 .child(
-                    TabBar::new("paramount-bookmarks-filter-tabs")
-                        .pill()
-                        .selected_index(filter_tab.index())
-                        .child(Tab::new().label("ALL TITLES"))
-                        .child(Tab::new().label("MOVIES"))
-                        .child(Tab::new().label("TV SHOWS"))
-                        .on_click(cx.listener(|this, ix: &usize, _, cx| {
-                            this.set_bookmarks_filter_tab(MediaFilterTab::from_index(*ix), cx);
-                        })),
+                    div()
+                        .text_sm()
+                        .text_color(cx.theme().muted_foreground)
+                        .child(format_count(
+                            dict.bookmarks.saved_count,
+                            cards.len(),
+                            locale,
+                        )),
                 ),
         )
-        // Grid or Empty State
+        .child(
+            directional_row(h_flex(), rtl)
+                .gap_2()
+                .child(tab_button(
+                    dict.browse.all_types,
+                    "bm-all",
+                    MediaFilterTab::All,
+                    filter_tab,
+                    cx,
+                ))
+                .child(tab_button(
+                    dict.browse.movies,
+                    "bm-movies",
+                    MediaFilterTab::Movies,
+                    filter_tab,
+                    cx,
+                ))
+                .child(tab_button(
+                    dict.browse.series,
+                    "bm-series",
+                    MediaFilterTab::Series,
+                    filter_tab,
+                    cx,
+                )),
+        )
         .child(if cards.is_empty() {
             Empty::new()
                 .header(
@@ -138,18 +107,14 @@ pub fn render_bookmarks_view(
                                 .with_variant(EmptyMediaVariant::Icon)
                                 .child(Icon::new(IconName::BookOpen)),
                         )
-                        .title(EmptyTitle::new().child("Your Watchlist is empty"))
-                        .description(EmptyDescription::new().child(
-                            "Explore Paramount+ movies and series and click '+' to add them to your Watchlist.",
-                        )),
+                        .title(EmptyTitle::new().child(dict.bookmarks.empty_title))
+                        .description(EmptyDescription::new().child(dict.bookmarks.empty_body)),
                 )
                 .content(
                     EmptyContent::new().child(
-                        Button::new("paramount-bookmarks-browse-cta")
+                        Button::new("watchlist-browse")
                             .primary()
-                            .large()
-                            .icon(IconName::LayoutDashboard)
-                            .label("BROWSE FEATURED TITLES")
+                            .label(dict.actions.browse)
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.select_section(NavSection::Home, cx);
                             })),
@@ -158,14 +123,30 @@ pub fn render_bookmarks_view(
                 .into_any_element()
         } else {
             h_flex()
-                .w_full()
                 .flex_wrap()
-                .gap_4()
-                .pt_2()
-                .pb_2()
-                .when(rtl, |this| this.flex_row_reverse())
+                .gap_x_4()
+                .gap_y_6()
+                .when(rtl, |row| row.flex_row_reverse())
                 .children(cards)
                 .into_any_element()
         })
         .into_any_element()
+}
+
+fn tab_button(
+    label: &'static str,
+    id: &'static str,
+    tab: MediaFilterTab,
+    selected: MediaFilterTab,
+    cx: &mut Context<StreamovieApp>,
+) -> impl IntoElement {
+    Button::new(id)
+        .small()
+        .selected(selected == tab)
+        .when(selected == tab, |btn| btn.primary())
+        .when(selected != tab, |btn| btn.outline())
+        .label(label)
+        .on_click(cx.listener(move |this, _, _, cx| {
+            this.set_bookmarks_filter_tab(tab, cx);
+        }))
 }

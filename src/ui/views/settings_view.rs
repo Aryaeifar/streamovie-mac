@@ -1,19 +1,15 @@
-//! Native `uni-kit` Settings view following the `SettingsBlock` pattern from
-//! `uni-kit/crates/blocks/src/settings.rs`.
-//! Supports Light / Dark / System theme mode, Streamovie's 7 brand accent palettes,
-//! English / Persian (RTL) language switching, and API/storage inspection.
+//! Appearance, language, and local storage. Catalog credentials stay in the environment.
 
-use gpui_kit::{
-    App, Context, IntoElement, ParentElement as _, SharedString, Styled as _, div,
-    prelude::FluentBuilder as _,
-};
 use gpui_kit::component::{
-    ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt as _, WindowExt as _,
+    ActiveTheme as _, Icon, IconName, StyledExt as _, WindowExt as _,
     button::{Button, ButtonVariants as _},
     h_flex,
     setting::{SettingField, SettingGroup, SettingItem, SettingPage, Settings},
-    tag::Tag,
     v_flex,
+};
+use gpui_kit::{
+    App, Context, IntoElement, ParentElement as _, SharedString, Styled as _, div,
+    prelude::FluentBuilder as _,
 };
 
 use crate::{
@@ -31,7 +27,6 @@ pub fn render_settings_view(
     let rtl = locale.is_rtl();
     let view = cx.entity();
 
-    // 1. Theme Mode dropdown (Dark / Light / System)
     let mode_options: Vec<(SharedString, SharedString)> = ThemeModePreference::ALL
         .iter()
         .map(|mode| (mode.code().into(), mode.label(dict).into()))
@@ -50,7 +45,6 @@ pub fn render_settings_view(
         )
     };
 
-    // 2. Brand Accent Palette dropdown (Netflix, Midnight, Aurora, Ocean, Sunset, Candy, Noir)
     let accent_options: Vec<(SharedString, SharedString)> = AccentPalette::ALL
         .iter()
         .map(|palette| (palette.code().into(), palette.label(dict).into()))
@@ -69,7 +63,6 @@ pub fn render_settings_view(
         )
     };
 
-    // 3. Language / RTL dropdown (English LTR / فارسی RTL)
     let lang_options: Vec<(SharedString, SharedString)> = vec![
         (Locale::En.code().into(), Locale::En.label().into()),
         (Locale::Fa.code().into(), Locale::Fa.label().into()),
@@ -93,17 +86,7 @@ pub fn render_settings_view(
         )
     };
 
-    let primary_host = app
-        .config()
-        .api_hosts()
-        .first()
-        .cloned()
-        .unwrap_or_default();
-    let catalog_key = app.config().streamovie_api_key().to_string();
-    let omdb_key = app.config().omdb_api_key().to_string();
     let storage_dir = app.storage_dir_display();
-    let rtl_status_text = dict.settings.rtl_status;
-
     let pages = vec![
         SettingPage::new(dict.settings.title)
             .icon(Icon::new(IconName::Settings2))
@@ -122,47 +105,6 @@ pub fn render_settings_view(
                     .items(vec![
                         SettingItem::new(dict.common.language, lang_field)
                             .description(dict.settings.language_description),
-                        SettingItem::render(move |_, _, _| {
-                            directional_row(h_flex(), rtl)
-                                .w_full()
-                                .justify_between()
-                                .child(div().text_sm().child(rtl_status_text))
-                                .child(
-                                    Tag::primary()
-                                        .small()
-                                        .outline()
-                                        .child(if rtl { "RTL · فارسی" } else { "LTR · English" }),
-                                )
-                                .into_any_element()
-                        }),
-                    ]),
-                SettingGroup::new()
-                    .title(dict.settings.api_group)
-                    .items(vec![
-                        SettingItem::render(move |_, _, _| {
-                            directional_row(h_flex(), rtl)
-                                .w_full()
-                                .justify_between()
-                                .child(div().text_sm().child(dict.settings.catalog_host_label))
-                                .child(Tag::secondary().small().outline().child(primary_host.clone()))
-                                .into_any_element()
-                        }),
-                        SettingItem::render(move |_, _, _| {
-                            directional_row(h_flex(), rtl)
-                                .w_full()
-                                .justify_between()
-                                .child(div().text_sm().child(dict.settings.catalog_key_label))
-                                .child(Tag::success().small().outline().child(catalog_key.clone()))
-                                .into_any_element()
-                        }),
-                        SettingItem::render(move |_, _, _| {
-                            directional_row(h_flex(), rtl)
-                                .w_full()
-                                .justify_between()
-                                .child(div().text_sm().child(dict.settings.omdb_key_label))
-                                .child(Tag::info().small().outline().child(omdb_key.clone()))
-                                .into_any_element()
-                        }),
                     ]),
                 SettingGroup::new()
                     .title(dict.settings.storage_group)
@@ -172,7 +114,7 @@ pub fn render_settings_view(
                             .justify_between()
                             .gap_3()
                             .child(div().text_sm().child(dict.settings.storage_path_label))
-                            .child(Tag::secondary().small().outline().child(storage_dir.clone()))
+                            .child(div().text_xs().child(storage_dir.clone()))
                             .into_any_element()
                     })]),
             ]),
@@ -186,12 +128,11 @@ pub fn render_settings_view(
                 .w_full()
                 .justify_between()
                 .items_center()
-                .gap_3()
                 .child(
                     v_flex()
                         .gap_1()
-                        .when(rtl, |this| this.items_end().text_right())
-                        .child(div().text_2xl().font_bold().child(dict.settings.title))
+                        .when(rtl, |col| col.items_end().text_right())
+                        .child(div().text_2xl().font_semibold().child(dict.settings.title))
                         .child(
                             div()
                                 .text_sm()
@@ -203,18 +144,16 @@ pub fn render_settings_view(
                     directional_row(h_flex(), rtl)
                         .gap_2()
                         .child(
-                            Button::new("settings-reset-btn")
+                            Button::new("settings-reset")
                                 .outline()
-                                .icon(IconName::Undo2)
                                 .label(dict.settings.reset)
                                 .on_click(cx.listener(|this, _, window, cx| {
                                     this.reset_settings(Some(window), cx);
                                 })),
                         )
                         .child(
-                            Button::new("settings-save-btn")
+                            Button::new("settings-save")
                                 .primary()
-                                .icon(IconName::Check)
                                 .label(dict.settings.save)
                                 .on_click(cx.listener(|this, _, window, cx| {
                                     this.save_settings_now(cx);

@@ -10,8 +10,8 @@ use serde::de::DeserializeOwned;
 use crate::{
     config::AppConfig,
     models::{
-        ApiCountry, ApiGenre, ApiMedia, ApiSeason, BrowseSort, HeroSpotlightItem,
-        HERO_SPOTLIGHT_SPECS, MediaCategory, SearchResponse, exclude_hidden_media,
+        ApiCountry, ApiGenre, ApiMedia, ApiSeason, BrowseSort, HERO_SPOTLIGHT_SPECS,
+        HeroSpotlightItem, MediaCategory, SearchResponse, exclude_hidden_media,
     },
 };
 
@@ -55,13 +55,15 @@ impl StreamovieClient {
                         Ok(body) => match serde_json::from_str::<T>(&body) {
                             Ok(parsed) => return Ok(parsed),
                             Err(err) => {
-                                last_error =
-                                    Some(anyhow!("Invalid JSON from {}: {}", host, err));
+                                last_error = Some(anyhow!("Invalid JSON from {}: {}", host, err));
                             }
                         },
                         Err(err) => {
-                            last_error =
-                                Some(anyhow!("Failed reading response body from {}: {}", host, err));
+                            last_error = Some(anyhow!(
+                                "Failed reading response body from {}: {}",
+                                host,
+                                err
+                            ));
                         }
                     }
                 }
@@ -168,10 +170,7 @@ impl StreamovieClient {
     /// Resolves the curated featured spotlight series from `Streamovie/src/app/page.tsx`
     /// (`Friends`, `Attack on Titan`, `Berserk`, `Dark`, `Breaking Bad`, `Game of Thrones`),
     /// falling back to top catalog items if any query does not match.
-    pub fn fetch_featured_spotlight(
-        &self,
-        fallback_series: &[ApiMedia],
-    ) -> Vec<HeroSpotlightItem> {
+    pub fn fetch_featured_spotlight(&self, fallback_series: &[ApiMedia]) -> Vec<HeroSpotlightItem> {
         let mut spotlight = Vec::new();
 
         for (title, backdrop, title_fa, description_fa) in HERO_SPOTLIGHT_SPECS {

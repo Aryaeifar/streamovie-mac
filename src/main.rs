@@ -3,8 +3,10 @@
 mod api;
 mod app;
 mod config;
+mod download;
 mod i18n;
 mod models;
+mod playback;
 mod state;
 mod storage;
 mod ui;
@@ -16,7 +18,7 @@ use gpui_kit::assets::AllAssets;
 use gpui_kit::component::TitleBar;
 use gpui_kit::*;
 
-actions!(streamovie, [Quit]);
+actions!(streamovie, [Quit, ClosePlayer]);
 
 fn main() {
     let app = gpui_kit::application().with_assets(AllAssets);
@@ -26,14 +28,16 @@ fn main() {
         gpui_kit::init(cx);
 
         // Register HTTP client so GPUI `img()` can fetch remote movie/series posters & backdrops
-        if let Ok(http_client) =
-            reqwest_client::ReqwestClient::user_agent("Streamovie-macOS/0.1.0")
+        if let Ok(http_client) = reqwest_client::ReqwestClient::user_agent("Streamovie-macOS/0.1.0")
         {
             cx.set_http_client(Arc::new(http_client));
         }
 
         cx.set_app_identity("com.streamovie.mac", "Streamovie");
-        cx.bind_keys([KeyBinding::new("cmd-q", Quit, None)]);
+        cx.bind_keys([
+            KeyBinding::new("cmd-q", Quit, None),
+            KeyBinding::new("escape", ClosePlayer, None),
+        ]);
         cx.on_action(|_: &Quit, cx: &mut App| cx.quit());
         cx.activate(true);
 

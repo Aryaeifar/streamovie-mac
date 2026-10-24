@@ -159,6 +159,91 @@ impl SourceLink {
                 .iter()
                 .any(|fmt| combined.contains(fmt))
     }
+
+    /// HLS playlist. WKWebView can play these, but they are not a single downloadable file.
+    pub fn is_hls(&self) -> bool {
+        url_path_lower(&self.url).contains(".m3u8")
+    }
+
+    /// A single media file the app can save without treating a playlist or web page as a download.
+    pub fn is_direct_download(&self) -> bool {
+        if self.is_trailer || self.is_hls() {
+            return false;
+        }
+        let path = url_path_lower(&self.url);
+        [".mp4", ".m4v", ".mov", ".webm", ".mkv", ".ogg", ".ogv"]
+            .iter()
+            .any(|ext| path.ends_with(ext))
+    }
+
+    /// Online playback candidate for the in-app player (progressive file or HLS).
+    pub fn is_streamable(&self) -> bool {
+        if self.is_trailer {
+            return false;
+        }
+        self.is_playable_video() || self.is_hls() || self.is_direct_download()
+    }
+
+    pub fn file_extension(&self) -> &'static str {
+        let path = url_path_lower(&self.url);
+        for ext in [
+            ".mp4", ".m4v", ".mov", ".webm", ".mkv", ".ogg", ".ogv", ".m3u8",
+        ] {
+            if path.ends_with(ext) {
+                return match ext {
+                    ".m4v" => "m4v",
+                    ".mov" => "mov",
+                    ".webm" => "webm",
+                    ".mkv" => "mkv",
+                    ".ogg" => "ogg",
+                    ".ogv" => "ogv",
+                    ".m3u8" => "m3u8",
+                    _ => "mp4",
+                };
+            }
+        }
+        "mp4"
+    }
+}
+
+fn url_path_lower(url: &str) -> String {
+    url.split(['?', '#'])
+        .next()
+        .unwrap_or(url)
+        .to_ascii_lowercase()
+}
+
+fn quality_rank(quality: &str) -> i32 {
+    let label = quality.to_ascii_lowercase();
+    if label.contains("2160") || label.contains("4k") {
+        50
+    } else if label.contains("1440") {
+        40
+    } else if label.contains("1080") {
+        30
+    } else if label.contains("720") {
+        20
+    } else if label.contains("480") {
+        10
+    } else {
+        0
+    }
+}
+
+/// Highest-quality source the in-app player can attempt.
+pub fn best_stream_source(sources: &[SourceLink]) -> Option<&SourceLink> {
+    sources
+        .iter()
+        .filter(|source| source.is_streamable())
+        .max_by_key(|source| quality_rank(&source.quality))
+}
+
+/// Highest-quality direct file suitable for a local download.
+pub fn best_download_source(sources: &[SourceLink]) -> Option<&SourceLink> {
+    sources
+        .iter()
+        .filter(|source| source.is_direct_download())
+        .max_by_key(|source| quality_rank(&source.quality))
 }
 
 /// Structured key-value block parsed from Persian catalog descriptions.
@@ -343,9 +428,7 @@ impl ApiMedia {
         first_non_empty_str(&[
             self.duration.as_deref(),
             self.runtime.as_deref(),
-            self.extra
-                .get("length")
-                .and_then(|v| v.as_str()),
+            self.extra.get("length").and_then(|v| v.as_str()),
         ])
     }
 
@@ -490,10 +573,7 @@ impl ApiSeason {
 }
 
 fn upgrade_tmdb_original(url: &str) -> String {
-    for prefix in [
-        "https://image.tmdb.org/t/p/",
-        "http://image.tmdb.org/t/p/",
-    ] {
+    for prefix in ["https://image.tmdb.org/t/p/", "http://image.tmdb.org/t/p/"] {
         if let Some(rest) = url.strip_prefix(prefix) {
             if let Some((_, tail)) = rest.split_once('/') {
                 return format!("{prefix}original/{tail}");

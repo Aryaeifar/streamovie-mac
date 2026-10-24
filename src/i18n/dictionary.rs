@@ -173,6 +173,22 @@ pub struct ThemeNamesDict {
     pub noir: &'static str,
 }
 
+pub struct PlayerDict {
+    pub back: &'static str,
+    pub unavailable_title: &'static str,
+    pub unavailable_body: &'static str,
+    pub preparing: &'static str,
+    pub downloading: &'static str,
+    pub downloaded: &'static str,
+    pub download_failed: &'static str,
+    pub download_cancelled: &'static str,
+    pub cancel: &'static str,
+    pub show_in_finder: &'static str,
+    pub no_download: &'static str,
+    pub episodes: &'static str,
+    pub now_playing: &'static str,
+}
+
 pub struct SettingsDict {
     pub title: &'static str,
     pub description: &'static str,
@@ -209,6 +225,7 @@ pub struct Dictionary {
     pub browse: BrowseDict,
     pub bookmarks: BookmarksDict,
     pub common: CommonDict,
+    pub player: PlayerDict,
     pub settings: SettingsDict,
 }
 
@@ -232,7 +249,7 @@ pub static EN_DICTIONARY: Dictionary = Dictionary {
         expand_sidebar: "Expand sidebar",
     },
     search: SearchDict {
-        placeholder: "Search movies & series...",
+        placeholder: "Search Streamovie",
         label: "Search movies and series",
         results: "Results",
         searching: "Searching…",
@@ -357,6 +374,21 @@ pub static EN_DICTIONARY: Dictionary = Dictionary {
         empty_body: "Save a movie or series from any card or detail page and it will appear here.",
         clear_all: "Clear all bookmarks",
     },
+    player: PlayerDict {
+        back: "Back",
+        unavailable_title: "Nothing to play",
+        unavailable_body: "This title does not include a playable MP4 or HLS stream.",
+        preparing: "Opening player…",
+        downloading: "Downloading",
+        downloaded: "Downloaded",
+        download_failed: "Download failed",
+        download_cancelled: "Download cancelled",
+        cancel: "Cancel",
+        show_in_finder: "Show in Finder",
+        no_download: "No direct file is available to download.",
+        episodes: "Episodes",
+        now_playing: "Now playing",
+    },
     common: CommonDict {
         loading: "Loading…",
         error: "Something went wrong",
@@ -388,7 +420,7 @@ pub static EN_DICTIONARY: Dictionary = Dictionary {
         save: "Save preferences",
         saved_notice: "Preferences saved to local disk.",
         themes: ThemeNamesDict {
-            paramount: "Paramount+",
+            paramount: "Cinema",
             netflix: "Netflix",
             midnight: "Midnight",
             aurora: "Aurora",
@@ -420,7 +452,7 @@ pub static FA_DICTIONARY: Dictionary = Dictionary {
         expand_sidebar: "بازکردن نوار کناری",
     },
     search: SearchDict {
-        placeholder: "جستجوی فیلم و سریال...",
+        placeholder: "جستجو در استریم‌مووی",
         label: "جستجوی فیلم و سریال",
         results: "نتایج",
         searching: "در حال جستجو…",
@@ -545,6 +577,21 @@ pub static FA_DICTIONARY: Dictionary = Dictionary {
         empty_body: "از کارت‌ها یا صفحه‌ی جزئیات یک فیلم یا سریال را ذخیره کنید تا اینجا نمایش داده شود.",
         clear_all: "حذف همه نشان‌شده‌ها",
     },
+    player: PlayerDict {
+        back: "بازگشت",
+        unavailable_title: "چیزی برای پخش نیست",
+        unavailable_body: "این عنوان فایل MP4 یا جریان HLS قابل پخش ندارد.",
+        preparing: "در حال باز کردن پخش‌کننده…",
+        downloading: "در حال دانلود",
+        downloaded: "دانلود شد",
+        download_failed: "دانلود ناموفق بود",
+        download_cancelled: "دانلود لغو شد",
+        cancel: "لغو",
+        show_in_finder: "نمایش در Finder",
+        no_download: "فایل مستقیمی برای دانلود وجود ندارد.",
+        episodes: "قسمت‌ها",
+        now_playing: "در حال پخش",
+    },
     common: CommonDict {
         loading: "در حال بارگذاری…",
         error: "مشکلی پیش آمد",
@@ -576,7 +623,7 @@ pub static FA_DICTIONARY: Dictionary = Dictionary {
         save: "ذخیره تنظیمات",
         saved_notice: "تنظیمات در حافظه محلی ذخیره شد.",
         themes: ThemeNamesDict {
-            paramount: "پارامونت پلاس",
+            paramount: "سینما",
             netflix: "نتفلیکس",
             midnight: "نیمه‌شب",
             aurora: "شفق",

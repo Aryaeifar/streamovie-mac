@@ -4,8 +4,8 @@
 pub mod dictionary;
 
 pub use dictionary::*;
-use gpui_kit::{Div, SharedString, Styled as _, TextAlign};
 use gpui_kit::component::Side;
+use gpui_kit::{Div, SharedString, Styled as _, TextAlign};
 use serde::{Deserialize, Serialize};
 
 /// Supported application locales.

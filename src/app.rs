@@ -1,32 +1,33 @@
-//! Root GPUI application view (`StreamovieApp`) combining `uni-kit`'s `TitleBar`,
-//! a Netflix + Linear vertical dark sidebar (`Home`, `Movies`, `Series`, `Search`,
-//! `Bookmarks`, `Settings`), top glassmorphic toolbar, `ImageCache` remote image loader,
-//! horizontal `ScrollHandle` carousels, and reactive async data loading for Streamovie + OMDb.
+//! Root GPUI application view for Streamovie.
 
 use std::sync::Arc;
+use std::time::Duration;
 
-use gpui_kit::{
-    AnyElement, App, AppContext as _, BoxShadow, Context, Entity, Image, InteractiveElement as _,
-    IntoElement, ParentElement as _, Render, ScrollHandle, SharedString,
-    StatefulInteractiveElement as _, Styled as _, Subscription, Window, div, hsla, point,
-    prelude::FluentBuilder as _, px, white,
-};
 use gpui_kit::component::{
-    ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt as _, TitleBar,
+    ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt as _, TitleBar, WindowExt as _,
     button::Button,
     h_flex,
     input::{Input, InputEvent, InputState},
     scroll::ScrollableElement as _,
     sidebar::SidebarToggleButton,
-    tag::Tag,
     v_flex,
+};
+use gpui_kit::{
+    AnyElement, App, AppContext as _, Context, Entity, Image, InteractiveElement as _, IntoElement,
+    ParentElement as _, Render, ScrollHandle, SharedString, StatefulInteractiveElement as _,
+    Styled as _, Subscription, Window, div, point, prelude::FluentBuilder as _, px, white,
 };
 
 use crate::{
     api::{OmdbClient, StreamovieClient},
     config::AppConfig,
+    download::{self, DownloadHandle, DownloadSnapshot},
     i18n::{Locale, directional_row},
-    models::{ApiGenre, ApiMedia, BrowseSort, LibraryStoreData, MediaCategory, SavedMediaEntry},
+    models::{
+        ApiGenre, ApiMedia, BrowseSort, LibraryStoreData, MediaCategory, SavedMediaEntry,
+        SourceLink, best_stream_source,
+    },
+    playback::{self, PlaybackSession},
     state::{
         CatalogGridState, CatalogMetadataState, DetailsState, HomeFeedState, MediaFilterTab,
         NavSection, SearchState,
@@ -36,6 +37,7 @@ use crate::{
         app_data_dir,
     },
     ui::{
+        components::render_player_view,
         image_cache::ImageCache,
         views::{
             render_bookmarks_view, render_catalog_view, render_details_view, render_home_view,
@@ -45,6 +47,7 @@ use crate::{
 };
 
 pub struct StreamovieApp {
+    #[allow(dead_code)]
     config: AppConfig,
     streamovie_api: StreamovieClient,
     omdb_api: OmdbClient,
@@ -69,6 +72,10 @@ pub struct StreamovieApp {
 
     bookmarks_filter_tab: MediaFilterTab,
     active_details: Option<DetailsState>,
+    playback: Option<PlaybackSession>,
+    downloads: Vec<DownloadHandle>,
+    download_polling: bool,
+    player_polling: bool,
 
     _subscriptions: Vec<Subscription>,
 }
@@ -97,6 +104,8 @@ impl StreamovieApp {
                 InputEvent::Change => {
                     let val = search_input.read(cx).value().to_string();
                     this.search.query = val.clone();
+                    this.search.generation = this.search.generation.wrapping_add(1);
+                    let generation = this.search.generation;
                     if val.trim().is_empty() {
                         this.search.results.clear();
                         this.search.error = None;
@@ -105,7 +114,18 @@ impl StreamovieApp {
                     } else if val.trim().chars().count() >= 2 {
                         this.section = NavSection::Search;
                         this.active_details = None;
-                        this.trigger_search_now(cx);
+                        this.close_playback(cx);
+                        cx.spawn(async move |this, cx| {
+                            cx.background_executor()
+                                .timer(Duration::from_millis(280))
+                                .await;
+                            let _ = this.update(cx, |this, cx| {
+                                if this.search.generation == generation {
+                                    this.trigger_search_now(cx);
+                                }
+                            });
+                        })
+                        .detach();
                     }
                 }
                 InputEvent::PressEnter { .. } => {
@@ -145,6 +165,10 @@ impl StreamovieApp {
             search_input,
             bookmarks_filter_tab: MediaFilterTab::All,
             active_details: None,
+            playback: None,
+            downloads: Vec::new(),
+            download_polling: false,
+            player_polling: false,
             _subscriptions: vec![search_sub],
         };
 
@@ -163,6 +187,7 @@ impl StreamovieApp {
 
     // --- Accessors for Views ---
 
+    #[allow(dead_code)]
     pub fn config(&self) -> &AppConfig {
         &self.config
     }
@@ -251,6 +276,7 @@ impl StreamovieApp {
     // --- Navigation & UI Actions ---
 
     pub fn select_section(&mut self, section: NavSection, cx: &mut Context<Self>) {
+        self.close_playback(cx);
         self.section = section;
         self.active_details = None;
         cx.notify();
@@ -278,6 +304,7 @@ impl StreamovieApp {
         }
     }
 
+    #[allow(dead_code)]
     pub fn step_spotlight(&mut self, delta: isize, cx: &mut Context<Self>) {
         let len = self.home.spotlight.len();
         if len == 0 {
@@ -313,6 +340,7 @@ impl StreamovieApp {
         added
     }
 
+    #[allow(dead_code)]
     pub fn toggle_like(&mut self, media_id: u64, cx: &mut Context<Self>) -> bool {
         let liked = self.library.toggle_like(media_id);
         let _ = self.bookmark_storage.save(&self.library);
@@ -492,6 +520,7 @@ impl StreamovieApp {
         self.reload_catalog(category, cx);
     }
 
+    #[allow(dead_code)]
     pub fn reset_catalog_filters(&mut self, category: MediaCategory, cx: &mut Context<Self>) {
         let state = self.catalog_state_mut(category);
         state.sort = BrowseSort::Created;
@@ -724,10 +753,246 @@ impl StreamovieApp {
     }
 
     pub fn close_details(&mut self, cx: &mut Context<Self>) {
+        self.close_playback(cx);
         if let Some(details) = self.active_details.take() {
             self.section = details.return_section;
         }
         cx.notify();
+    }
+
+    pub fn watch_title(
+        &mut self,
+        media: ApiMedia,
+        category: MediaCategory,
+        cx: &mut Context<Self>,
+    ) {
+        if category == MediaCategory::Series {
+            let ready = self.active_details.as_ref().is_some_and(|details| {
+                details.media.id == media.id
+                    && !details.seasons_loading
+                    && !details.seasons.is_empty()
+            });
+            if ready {
+                self.play_loaded_series(cx);
+            } else {
+                self.open_details(media, category, cx);
+                if let Some(details) = self.active_details.as_mut() {
+                    details.autoplay_when_ready = true;
+                }
+                cx.notify();
+            }
+            return;
+        }
+        let title = media.display_title();
+        let sources = media.source_links();
+        self.watch_sources(title, sources, cx);
+    }
+
+    pub fn watch_sources(
+        &mut self,
+        heading: String,
+        sources: Vec<SourceLink>,
+        cx: &mut Context<Self>,
+    ) {
+        self.close_playback(cx);
+        let message = self.locale().dict().player.unavailable_body.to_string();
+        self.playback = Some(match best_stream_source(&sources) {
+            Some(source) => PlaybackSession::for_url(heading, source.url.clone()),
+            None => PlaybackSession::unavailable(heading, message),
+        });
+        self.ensure_player_poll(cx);
+        cx.notify();
+    }
+
+    pub fn close_playback(&mut self, cx: &mut Context<Self>) {
+        if let Some(session) = self.playback.take() {
+            if let Some(webview) = session.webview {
+                webview.update(cx, |webview, _| webview.hide());
+            }
+        }
+    }
+
+    fn play_loaded_series(&mut self, cx: &mut Context<Self>) {
+        let Some(details) = self.active_details.as_ref() else {
+            return;
+        };
+        let series_title = details.media.display_title();
+        let episode = details
+            .seasons
+            .first()
+            .and_then(|season| season.episode_list().into_iter().next());
+        match episode {
+            Some(episode) => {
+                let heading = format!("{series_title} · {}", episode.title);
+                let sources = episode.sources;
+                self.watch_sources(heading, sources, cx);
+            }
+            None => self.watch_sources(series_title, Vec::new(), cx),
+        }
+    }
+
+    fn settle_autoplay(&mut self, cx: &mut Context<Self>) {
+        let ready = self
+            .active_details
+            .as_ref()
+            .is_some_and(|details| details.autoplay_when_ready && !details.seasons_loading);
+        if !ready {
+            return;
+        }
+        if let Some(details) = self.active_details.as_mut() {
+            details.autoplay_when_ready = false;
+        }
+        self.play_loaded_series(cx);
+    }
+
+    fn ensure_player_mounted(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let should_mount = self.playback.as_ref().is_some_and(|session| {
+            session.stream_url.is_some()
+                && session.webview.is_none()
+                && session.mount_error.is_none()
+        });
+        if !should_mount {
+            return;
+        }
+        let (url, title, flag) = {
+            let session = self.playback.as_ref().unwrap();
+            (
+                session.stream_url.clone().unwrap(),
+                session.heading.clone(),
+                session.close_requested.clone(),
+            )
+        };
+        match playback::mount_player(window, cx, &url, &title, flag) {
+            Ok(webview) => {
+                if let Some(session) = self.playback.as_mut() {
+                    session.webview = Some(webview);
+                }
+            }
+            Err(err) => {
+                if let Some(session) = self.playback.as_mut() {
+                    session.message = err.clone();
+                    session.mount_error = Some(err);
+                }
+            }
+        }
+    }
+
+    pub fn download_snapshot(&self, key: &str) -> Option<DownloadSnapshot> {
+        self.downloads
+            .iter()
+            .find(|handle| handle.key() == key)
+            .map(DownloadHandle::snapshot)
+    }
+
+    pub fn start_episode_download(
+        &mut self,
+        key: String,
+        title: String,
+        sources: Vec<SourceLink>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let dict = self.locale().dict();
+        if self
+            .download_snapshot(&key)
+            .is_some_and(|job| job.phase == download::DownloadPhase::Running)
+        {
+            return;
+        }
+        let Some(source) = crate::models::best_download_source(&sources) else {
+            window.push_notification(dict.player.no_download, cx);
+            return;
+        };
+        let extension = source.file_extension();
+        match download::start_download(key.clone(), title, source.url.clone(), extension) {
+            Ok(handle) => {
+                self.downloads.retain(|existing| existing.key() != key);
+                self.downloads.push(handle);
+                self.ensure_download_poll(cx);
+                cx.notify();
+            }
+            Err(err) => window.push_notification(err.to_string(), cx),
+        }
+    }
+
+    pub fn cancel_download(&mut self, key: &str, cx: &mut Context<Self>) {
+        if let Some(handle) = self.downloads.iter().find(|handle| handle.key() == key) {
+            handle.cancel();
+        }
+        cx.notify();
+    }
+
+    pub fn reveal_download(&mut self, key: &str, cx: &mut Context<Self>) {
+        if let Some(path) = self
+            .download_snapshot(key)
+            .and_then(|snapshot| snapshot.path)
+        {
+            download::reveal_path(&path);
+        }
+        cx.notify();
+    }
+
+    fn ensure_player_poll(&mut self, cx: &mut Context<Self>) {
+        if self.player_polling {
+            return;
+        }
+        self.player_polling = true;
+        cx.spawn(async move |this, cx| {
+            loop {
+                cx.background_executor()
+                    .timer(Duration::from_millis(250))
+                    .await;
+                let alive = this
+                    .update(cx, |this, cx| {
+                        if this
+                            .playback
+                            .as_ref()
+                            .is_some_and(|session| session.consume_close())
+                        {
+                            this.close_playback(cx);
+                        }
+                        let alive = this.playback.is_some();
+                        if !alive {
+                            this.player_polling = false;
+                        }
+                        cx.notify();
+                        alive
+                    })
+                    .unwrap_or(false);
+                if !alive {
+                    break;
+                }
+            }
+        })
+        .detach();
+    }
+
+    fn ensure_download_poll(&mut self, cx: &mut Context<Self>) {
+        if self.download_polling {
+            return;
+        }
+        self.download_polling = true;
+        cx.spawn(async move |this, cx| {
+            loop {
+                cx.background_executor()
+                    .timer(Duration::from_millis(400))
+                    .await;
+                let running = this
+                    .update(cx, |this, cx| {
+                        let running = this.downloads.iter().any(DownloadHandle::is_running);
+                        if !running {
+                            this.download_polling = false;
+                        }
+                        cx.notify();
+                        running
+                    })
+                    .unwrap_or(false);
+                if !running {
+                    break;
+                }
+            }
+        })
+        .detach();
     }
 
     pub fn select_season(&mut self, season_index: usize, cx: &mut Context<Self>) {
@@ -748,14 +1013,7 @@ impl StreamovieApp {
             .or_else(|| details.media.imdb_id());
         cx.notify();
 
-        self.fetch_omdb_season_guide(
-            media_id,
-            lookup_title,
-            season_index + 1,
-            year,
-            imdb_id,
-            cx,
-        );
+        self.fetch_omdb_season_guide(media_id, lookup_title, season_index + 1, year, imdb_id, cx);
     }
 
     fn fetch_omdb_season_guide(
@@ -803,292 +1061,118 @@ impl StreamovieApp {
         .detach();
     }
 
-    // --- Paramount+ Left Dock Navigation ---
-
-    fn render_paramount_nav_row(&self, item: NavSection, cx: &mut Context<Self>) -> AnyElement {
+    fn render_nav_row(&self, item: NavSection, cx: &mut Context<Self>) -> AnyElement {
         let locale = self.locale();
         let dict = locale.dict();
         let rtl = locale.is_rtl();
         let collapsed = self.sidebar_collapsed;
-        let is_active = self.active_details.is_none() && self.section == item;
-        let bookmark_count = self.library.watchlist.len();
-
-        let primary = cx.theme().primary; // #0064FF Paramount Blue
-        let active_bg = primary.opacity(0.18);
-        let hover_bg = hsla(216.0 / 360.0, 0.40, 0.85, 0.08);
-        let fg_active = white();
-        let fg_muted = hsla(215.0 / 360.0, 0.18, 0.70, 1.0);
-
-        let row_id = SharedString::from(format!("paramount-nav-{}", item.label(dict)));
+        let is_active =
+            self.playback.is_none() && self.active_details.is_none() && self.section == item;
+        let primary = cx.theme().primary;
+        let muted = cx.theme().sidebar_foreground.opacity(0.62);
+        let row_id = SharedString::from(format!("nav-{}", item.label(dict)));
 
         div()
             .id(row_id)
-            .relative()
             .w_full()
-            .px_3()
-            .py_2p5()
-            .rounded(px(8.))
+            .h(px(40.))
+            .px_2p5()
+            .rounded(px(10.))
             .cursor_pointer()
-            .when(is_active, |el| el.bg(active_bg))
-            .hover(move |s| s.bg(if is_active { active_bg } else { hover_bg }))
+            .when(is_active, |el| el.bg(primary.opacity(0.16)))
+            .hover(|style| style.bg(cx.theme().sidebar_foreground.opacity(0.06)))
             .on_click(cx.listener(move |this, _, _, cx| {
                 this.select_section(item, cx);
             }))
-            // Paramount+ vertical active indicator bar with luminous blue glow
-            .when(is_active, |el| {
-                el.child(
-                    div()
-                        .absolute()
-                        .top(px(8.))
-                        .bottom(px(8.))
-                        .when(!rtl, |bar| bar.left_0())
-                        .when(rtl, |bar| bar.right_0())
-                        .w(px(3.5))
-                        .rounded_full()
-                        .bg(primary)
-                        .shadow(vec![BoxShadow {
-                            offset: point(px(0.), px(0.)),
-                            blur_radius: px(10.),
-                            spread_radius: px(1.),
-                            inset: false,
-                            color: primary.opacity(0.85),
-                        }]),
-                )
-            })
             .child(
                 directional_row(h_flex(), rtl)
-                    .w_full()
+                    .h_full()
                     .items_center()
-                    .justify_between()
                     .gap_3()
                     .when(collapsed, |row| row.justify_center())
-                    .child(
-                        directional_row(h_flex(), rtl)
-                            .items_center()
-                            .gap_3()
-                            .min_w_0()
-                            .child(
-                                Icon::new(item.icon())
-                                    .small()
-                                    .text_color(if is_active { primary } else { fg_muted }),
-                            )
-                            .when(!collapsed, |row| {
-                                row.child(
-                                    div()
-                                        .text_xs()
-                                        .when(is_active, |t| t.font_extrabold().text_color(fg_active))
-                                        .when(!is_active, |t| t.font_semibold().text_color(fg_muted))
-                                        .whitespace_nowrap()
-                                        .overflow_hidden()
-                                        .text_ellipsis()
-                                        .child(item.label(dict).to_uppercase()),
-                                )
-                            }),
-                    )
-                    .when(
-                        !collapsed && item == NavSection::Bookmarks && bookmark_count > 0,
-                        |row| {
-                            row.child(
-                                div()
-                                    .px_2()
-                                    .py_0p5()
-                                    .rounded_full()
-                                    .bg(primary)
-                                    .text_xs()
-                                    .font_bold()
-                                    .text_color(white())
-                                    .shadow(vec![BoxShadow {
-                                        offset: point(px(0.), px(2.)),
-                                        blur_radius: px(6.),
-                                        spread_radius: px(0.),
-                                        inset: false,
-                                        color: primary.opacity(0.60),
-                                    }])
-                                    .child(bookmark_count.to_string()),
-                            )
-                        },
-                    ),
+                    .child(Icon::new(item.icon()).small().text_color(if is_active {
+                        primary
+                    } else {
+                        muted
+                    }))
+                    .when(!collapsed, |row| {
+                        row.child(
+                            div()
+                                .text_sm()
+                                .when(is_active, |text| {
+                                    text.font_semibold().text_color(cx.theme().foreground)
+                                })
+                                .when(!is_active, |text| text.text_color(muted))
+                                .child(item.label(dict)),
+                        )
+                    }),
             )
             .into_any_element()
     }
 
     fn render_sidebar(&self, cx: &mut Context<Self>) -> AnyElement {
         let locale = self.locale();
-        let _dict = locale.dict();
+        let dict = locale.dict();
         let rtl = locale.is_rtl();
         let collapsed = self.sidebar_collapsed;
-
-        // Paramount+ ordered navigation: Search, Home, Series, Movies
-        let primary_items = [
-            NavSection::Search,
+        let width = if collapsed { px(72.) } else { px(220.) };
+        let primary = [
             NavSection::Home,
-            NavSection::Series,
             NavSection::Movies,
+            NavSection::Series,
+            NavSection::Search,
         ];
-        let mut primary_rows = Vec::with_capacity(primary_items.len());
-        for sec in primary_items {
-            primary_rows.push(self.render_paramount_nav_row(sec, cx));
-        }
-
-        let library_items = [NavSection::Bookmarks, NavSection::Settings];
-        let mut library_rows = Vec::with_capacity(library_items.len());
-        for sec in library_items {
-            library_rows.push(self.render_paramount_nav_row(sec, cx));
-        }
-
-        let sidebar_width = if collapsed { px(72.) } else { px(240.) };
+        let library = [NavSection::Bookmarks, NavSection::Settings];
 
         v_flex()
-            .w(sidebar_width)
+            .w(width)
             .h_full()
             .flex_shrink_0()
             .bg(cx.theme().sidebar)
-            .when(!rtl, |el| el.border_r_1())
-            .when(rtl, |el| el.border_l_1())
-            .border_color(cx.theme().sidebar_border)
-            .justify_between()
-            .p_3()
-            // Top Brand Header + Navigation Groups
+            .px_3()
+            .py_4()
+            .gap_6()
             .child(
-                v_flex()
-                    .w_full()
-                    .gap_5()
-                    // Paramount+ Brand Header
+                directional_row(h_flex(), rtl)
+                    .items_center()
+                    .gap_2p5()
+                    .px_1()
+                    .when(collapsed, |row| row.justify_center())
                     .child(
-                        directional_row(h_flex(), rtl)
-                            .w_full()
-                            .px_2()
-                            .py_2()
+                        div()
+                            .size_8()
+                            .rounded(px(8.))
+                            .bg(cx.theme().primary)
+                            .flex()
                             .items_center()
-                            .gap_3()
-                            .when(collapsed, |r| r.justify_center())
-                            .child(
-                                div()
-                                    .flex()
-                                    .items_center()
-                                    .justify_center()
-                                    .size_9()
-                                    .flex_shrink_0()
-                                    .rounded(px(8.))
-                                    .bg(cx.theme().primary)
-                                    .text_color(white())
-                                    .shadow(vec![BoxShadow {
-                                        offset: point(px(0.), px(4.)),
-                                        blur_radius: px(14.),
-                                        spread_radius: px(0.),
-                                        inset: false,
-                                        color: cx.theme().primary.opacity(0.60),
-                                    }])
-                                    .child(Icon::new(IconName::Play)),
-                            )
-                            .when(!collapsed, |row| {
-                                row.child(
-                                    v_flex()
-                                        .flex_1()
-                                        .min_w_0()
-                                        .when(rtl, |col| col.items_end().text_right())
-                                        .child(
-                                            div()
-                                                .text_base()
-                                                .font_extrabold()
-                                                .text_color(cx.theme().foreground)
-                                                .child("PARAMOUNT+"),
-                                        )
-                                        .child(
-                                            div()
-                                                .text_xs()
-                                                .font_bold()
-                                                .text_color(cx.theme().primary)
-                                                .child("STREAMOVIE"),
-                                        ),
-                                )
-                            }),
+                            .justify_center()
+                            .text_color(white())
+                            .child(Icon::new(IconName::Play).small()),
                     )
-                    // Primary Navigation Group (EXPLORE)
-                    .child(
-                        v_flex()
-                            .w_full()
-                            .gap_1()
-                            .when(!collapsed, |col| {
-                                col.child(
-                                    div()
-                                        .px_3()
-                                        .pb_1()
-                                        .text_size(px(10.))
-                                        .font_extrabold()
-                                        .text_color(cx.theme().sidebar_foreground.opacity(0.45))
-                                        .when(rtl, |t| t.text_right())
-                                        .child("EXPLORE"),
-                                )
-                            })
-                            .children(primary_rows),
-                    )
-                    // Library & Settings Group (MY STUFF)
-                    .child(
-                        v_flex()
-                            .w_full()
-                            .gap_1()
-                            .when(!collapsed, |col| {
-                                col.child(
-                                    div()
-                                        .px_3()
-                                        .pb_1()
-                                        .text_size(px(10.))
-                                        .font_extrabold()
-                                        .text_color(cx.theme().sidebar_foreground.opacity(0.45))
-                                        .when(rtl, |t| t.text_right())
-                                        .child("MY STUFF"),
-                                )
-                            })
-                            .children(library_rows),
-                    ),
+                    .when(!collapsed, |row| {
+                        row.child(
+                            div()
+                                .text_base()
+                                .font_semibold()
+                                .text_color(cx.theme().foreground)
+                                .child(dict.brand.name),
+                        )
+                    }),
             )
-            // Sidebar Footer: Active Locale
             .child(
-                div()
-                    .w_full()
-                    .p_2p5()
-                    .rounded(px(8.))
-                    .border_1()
-                    .border_color(cx.theme().sidebar_border)
-                    .bg(hsla(220.0 / 360.0, 0.38, 0.08, 0.60))
-                    .child(
-                        directional_row(h_flex(), rtl)
-                            .w_full()
-                            .items_center()
-                            .justify_between()
-                            .gap_2()
-                            .when(collapsed, |r| r.justify_center())
-                            .child(
-                                directional_row(h_flex(), rtl)
-                                    .items_center()
-                                    .gap_2()
-                                    .child(
-                                        Icon::new(IconName::Globe)
-                                            .small()
-                                            .text_color(cx.theme().primary),
-                                    )
-                                    .when(!collapsed, |r| {
-                                        r.child(
-                                            div()
-                                                .text_xs()
-                                                .font_medium()
-                                                .text_color(
-                                                    cx.theme().sidebar_foreground.opacity(0.75),
-                                                )
-                                                .child(locale.label()),
-                                        )
-                                    }),
-                            )
-                            .when(!collapsed, |r| {
-                                r.child(
-                                    Tag::primary()
-                                        .small()
-                                        .outline()
-                                        .child("Paramount+"),
-                                )
-                            }),
-                    ),
+                v_flex().gap_1().children(
+                    primary
+                        .into_iter()
+                        .map(|item| self.render_nav_row(item, cx)),
+                ),
+            )
+            .child(div().flex_1())
+            .child(
+                v_flex().gap_1().children(
+                    library
+                        .into_iter()
+                        .map(|item| self.render_nav_row(item, cx)),
+                ),
             )
             .into_any_element()
     }
@@ -1098,13 +1182,6 @@ impl StreamovieApp {
         let dict = locale.dict();
         let rtl = locale.is_rtl();
         let side = locale.sidebar_side();
-
-        let active_title = if let Some(details) = self.active_details.as_ref() {
-            details.media.display_title()
-        } else {
-            self.section.label(dict).to_uppercase()
-        };
-
         let mode_icon = match self.settings.theme_mode {
             ThemeModePreference::Dark => IconName::Moon,
             ThemeModePreference::Light => IconName::Sun,
@@ -1114,89 +1191,51 @@ impl StreamovieApp {
         directional_row(h_flex(), rtl)
             .w_full()
             .px_6()
-            .py_3()
-            .border_b_1()
-            .border_color(cx.theme().border)
-            .bg(cx.theme().background)
-            .justify_between()
+            .h(px(64.))
             .items_center()
+            .justify_between()
             .gap_4()
-            // Left/Start cluster: Sidebar collapse toggle + section heading
             .child(
-                directional_row(h_flex(), rtl)
-                    .items_center()
-                    .gap_3()
-                    .min_w_0()
-                    .child(
-                        SidebarToggleButton::new()
-                            .side(side)
-                            .collapsed(self.sidebar_collapsed)
-                            .accessibility_label(if self.sidebar_collapsed {
-                                dict.nav.expand_sidebar
-                            } else {
-                                dict.nav.collapse_sidebar
-                            })
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.sidebar_collapsed = !this.sidebar_collapsed;
-                                cx.notify();
-                            })),
-                    )
-                    .child(
-                        div()
-                            .text_lg()
-                            .font_extrabold()
-                            .whitespace_nowrap()
-                            .overflow_hidden()
-                            .text_ellipsis()
-                            .child(active_title),
-                    ),
+                SidebarToggleButton::new()
+                    .side(side)
+                    .collapsed(self.sidebar_collapsed)
+                    .accessibility_label(if self.sidebar_collapsed {
+                        dict.nav.expand_sidebar
+                    } else {
+                        dict.nav.collapse_sidebar
+                    })
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.sidebar_collapsed = !this.sidebar_collapsed;
+                        cx.notify();
+                    })),
             )
-            // Center cluster: Paramount+ Quick Search Input
             .child(
-                div().w(px(360.)).child(
-                    Input::new(&self.search_input)
-                        .small()
-                        .cleanable(true)
-                        .prefix(
-                            Icon::new(IconName::Search)
-                                .small()
-                                .text_color(cx.theme().primary),
-                        ),
+                div().w(px(460.)).max_w_full().child(
+                    Input::new(&self.search_input).cleanable(true).prefix(
+                        Icon::new(IconName::Search)
+                            .small()
+                            .text_color(cx.theme().muted_foreground),
+                    ),
                 ),
             )
-            // Right/End cluster: Refresh, EN/FA Language Toggle, Theme Mode Cycle
             .child(
                 directional_row(h_flex(), rtl)
-                    .items_center()
-                    .gap_2()
+                    .gap_1()
                     .child(
-                        Button::new("paramount-toolbar-refresh")
+                        Button::new("toolbar-locale")
                             .small()
                             .outline()
-                            .icon(IconName::RefreshCw)
-                            .accessibility_label(dict.actions.refresh)
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.reload_home_feeds(cx);
-                                this.reload_catalog(MediaCategory::Movie, cx);
-                                this.reload_catalog(MediaCategory::Series, cx);
-                            })),
-                    )
-                    .child(
-                        Button::new("paramount-toolbar-locale")
-                            .small()
-                            .outline()
-                            .icon(IconName::Globe)
                             .label(locale.short_badge())
                             .on_click(cx.listener(|this, _, window, cx| {
                                 this.toggle_locale(Some(window), cx);
                             })),
                     )
                     .child(
-                        Button::new("paramount-toolbar-theme-mode")
+                        Button::new("toolbar-theme")
                             .small()
                             .outline()
                             .icon(mode_icon)
-                            .label(self.settings.theme_mode.label(dict))
+                            .tooltip(self.settings.theme_mode.label(dict))
                             .on_click(cx.listener(|this, _, window, cx| {
                                 this.cycle_theme_mode(Some(window), cx);
                             })),
@@ -1212,10 +1251,35 @@ impl Render for StreamovieApp {
         let dict = locale.dict();
         let rtl = locale.is_rtl();
 
-        let sidebar = self.render_sidebar(cx);
-        let toolbar = self.render_top_toolbar(cx);
+        if self
+            .playback
+            .as_ref()
+            .is_some_and(|session| session.consume_close())
+        {
+            self.close_playback(cx);
+        }
+        self.settle_autoplay(cx);
+        self.ensure_player_mounted(window, cx);
 
-        let content = if let Some(details) = self.active_details.clone() {
+        let playing = self.playback.is_some();
+        let player = self
+            .playback
+            .as_ref()
+            .map(|session| render_player_view(self, session, cx));
+        let sidebar = if playing {
+            None
+        } else {
+            Some(self.render_sidebar(cx))
+        };
+        let toolbar = if playing {
+            None
+        } else {
+            Some(self.render_top_toolbar(cx))
+        };
+
+        let content = if playing {
+            player.unwrap_or_else(|| div().into_any_element())
+        } else if let Some(details) = self.active_details.clone() {
             render_details_view(self, &details, cx)
         } else {
             match self.section {
@@ -1228,8 +1292,6 @@ impl Render for StreamovieApp {
             }
         };
 
-        let _ = window;
-
         div()
             .size_full()
             .bg(cx.theme().background)
@@ -1237,60 +1299,45 @@ impl Render for StreamovieApp {
             .child(
                 v_flex()
                     .size_full()
-                    // Native macOS TitleBar
                     .child(
                         TitleBar::new().child(
-                            directional_row(h_flex(), rtl)
-                                .w_full()
-                                .justify_between()
-                                .pr_4()
-                                .child(
-                                    directional_row(h_flex(), rtl)
-                                        .gap_2()
-                                        .child(
-                                            div()
-                                                .text_xs()
-                                                .font_bold()
-                                                .text_color(cx.theme().foreground)
-                                                .child(dict.brand.name),
-                                        )
-                                        .child(
-                                            div()
-                                                .text_xs()
-                                                .text_color(cx.theme().muted_foreground)
-                                                .child("· Paramount+ Cinema Edition"),
-                                        ),
-                                )
-                                .child(
-                                    div()
-                                        .text_xs()
-                                        .text_color(cx.theme().muted_foreground)
-                                        .child(if rtl { "فارسی (RTL)" } else { "English (LTR)" }),
-                                ),
+                            div()
+                                .pl_2()
+                                .text_xs()
+                                .font_semibold()
+                                .text_color(cx.theme().muted_foreground)
+                                .child(dict.brand.name),
                         ),
                     )
-                    // Main Workspace Body: Netflix Sidebar + Scrollable Viewport
                     .child(
                         directional_row(h_flex(), rtl)
                             .flex_1()
                             .min_h_0()
                             .w_full()
                             .overflow_hidden()
-                            .child(sidebar)
+                            .children(sidebar)
                             .child(
                                 v_flex()
                                     .flex_1()
                                     .min_w_0()
                                     .h_full()
                                     .overflow_hidden()
-                                    .child(toolbar)
-                                    .child(if self.section == NavSection::Settings
+                                    .children(toolbar)
+                                    .child(if playing {
+                                        div()
+                                            .flex_1()
+                                            .min_h_0()
+                                            .overflow_hidden()
+                                            .child(content)
+                                            .into_any_element()
+                                    } else if self.section == NavSection::Settings
                                         && self.active_details.is_none()
                                     {
                                         div()
                                             .flex_1()
                                             .min_h_0()
-                                            .p_6()
+                                            .px_8()
+                                            .py_6()
                                             .overflow_hidden()
                                             .child(content)
                                             .into_any_element()
@@ -1299,7 +1346,6 @@ impl Render for StreamovieApp {
                                             .id("streamovie-main-scroll")
                                             .flex_1()
                                             .min_h_0()
-                                            .p_6()
                                             .overflow_y_scrollbar()
                                             .child(content)
                                             .into_any_element()

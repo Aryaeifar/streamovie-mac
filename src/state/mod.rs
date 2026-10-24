@@ -146,6 +146,7 @@ impl CatalogGridState {
 #[derive(Clone, Debug, Default)]
 pub struct SearchState {
     pub query: String,
+    pub generation: u64,
     pub filter_tab: MediaFilterTab,
     pub loading: bool,
     pub error: Option<String>,
@@ -163,6 +164,7 @@ pub struct DetailsState {
     pub seasons_error: Option<String>,
     pub selected_season_index: usize,
     pub episode_guide_open: bool,
+    pub autoplay_when_ready: bool,
     pub omdb_details: Option<OmdbDetails>,
     pub omdb_loading: bool,
     pub omdb_error: Option<String>,
@@ -181,6 +183,7 @@ impl DetailsState {
             seasons_error: None,
             selected_season_index: 0,
             episode_guide_open: true,
+            autoplay_when_ready: false,
             omdb_details: None,
             omdb_loading: true,
             omdb_error: None,

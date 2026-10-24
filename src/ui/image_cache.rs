@@ -23,11 +23,11 @@ use std::{
     time::Duration,
 };
 
+use gpui_kit::component::{ActiveTheme as _, Icon, IconName, Sizable as _, h_flex, v_flex};
 use gpui_kit::{
     AnyElement, Context, Image, ImageFormat, IntoElement, ObjectFit, ParentElement as _, Pixels,
     Styled as _, StyledImage as _, div, img, prelude::FluentBuilder as _,
 };
-use gpui_kit::component::{ActiveTheme as _, Icon, IconName, Sizable as _, h_flex, v_flex};
 use reqwest::blocking::Client;
 
 use crate::{app::StreamovieApp, config::DEFAULT_API_HOSTS, storage::app_data_dir};
