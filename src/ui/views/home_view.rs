@@ -230,7 +230,7 @@ fn rail(
                 .child(
                     h_flex()
                         .gap_4()
-                        .pb_2()
+                        .py(px(48.))
                         .when(rtl, |row| row.flex_row_reverse())
                         .children(cards),
                 )

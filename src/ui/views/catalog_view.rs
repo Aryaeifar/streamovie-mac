@@ -204,7 +204,8 @@ pub fn render_catalog_view(
                     h_flex()
                         .flex_wrap()
                         .gap_x_4()
-                        .gap_y_6()
+                        .gap_y(px(72.))
+                        .py(px(36.))
                         .when(rtl, |row| row.flex_row_reverse())
                         .children(cards),
                 )

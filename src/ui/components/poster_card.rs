@@ -5,9 +5,10 @@ use gpui_kit::component::{
     button::Button, h_flex, v_flex,
 };
 use gpui_kit::{
-    AnyElement, BoxShadow, Context, InteractiveElement as _, IntoElement, ParentElement as _,
-    SharedString, StatefulInteractiveElement as _, Styled as _, black, div, hsla,
-    linear_color_stop, linear_gradient, point, prelude::FluentBuilder as _, px, relative, white,
+    AnimationExt as _, AnyElement, BoxShadow, Context, InteractiveElement as _, IntoElement,
+    ParentElement as _, SharedString, SpringAnimation, SpringConfig,
+    StatefulInteractiveElement as _, Styled as _, black, deferred, div, hsla, linear_color_stop,
+    linear_gradient, point, prelude::FluentBuilder as _, px, relative, white,
 };
 
 use crate::{
@@ -82,8 +83,10 @@ pub fn render_poster_card_with_style(
         SharedString::from(format!("bm-{id_scope}-{}-{media_id}", category.as_str()));
     let media_for_open = media.clone();
     let media_for_bookmark = media.clone();
-    let group = SharedString::from(format!("card-{id_scope}"));
-    let hover_group = group.clone();
+    let hovered = app.card_is_hovered(&card_id);
+    let hover_id = card_id.clone();
+    // Poster plus the title block (8px gap + 40px meta). The spring scales this box.
+    let base_h = frame_h + px(48.);
 
     let artwork = render_remote_image(
         app,
@@ -99,21 +102,24 @@ pub fn render_poster_card_with_style(
         cx,
     );
 
-    v_flex()
-        .id(card_id)
+    let card = v_flex()
+        .id(card_id.clone())
         .w(card_w)
+        .h(base_h)
         .flex_shrink_0()
-        .gap_2()
         .cursor_pointer()
-        .group(group)
+        .on_hover(cx.listener(move |this, hovered, _, cx| {
+            this.set_card_hovered(&hover_id, *hovered, cx);
+        }))
         .on_click(cx.listener(move |this, _, _, cx| {
             this.open_details(media_for_open.clone(), category, cx);
         }))
         .child(
             div()
                 .relative()
-                .w(card_w)
-                .h(frame_h)
+                .w_full()
+                .flex_1()
+                .min_h_0()
                 .rounded(px(10.))
                 .overflow_hidden()
                 .bg(cx.theme().muted)
@@ -124,7 +130,6 @@ pub fn render_poster_card_with_style(
                     inset: false,
                     color: hsla(0.0, 0.0, 0.0, 0.35),
                 }])
-                .group_hover(hover_group, |style| style.opacity(0.92))
                 .child(artwork)
                 .child(
                     div()
@@ -197,8 +202,13 @@ pub fn render_poster_card_with_style(
         .child(
             v_flex()
                 .w_full()
+                .h(px(40.))
+                .mt(px(8.))
+                .flex_shrink_0()
+                .justify_center()
                 .px_0p5()
                 .gap_0p5()
+                .overflow_hidden()
                 .when(title_is_rtl, |col| col.items_end().text_right())
                 .child(
                     div()
@@ -226,5 +236,26 @@ pub fn render_poster_card_with_style(
                         })),
                 ),
         )
-        .into_any_element()
+        .with_spring(
+            SharedString::from(format!("scale-{card_id}")),
+            SpringAnimation::new(SpringConfig::new(260.0, 34.0, 1.0))
+                .to(if hovered { 1.1 } else { 1.0 })
+                .from(1.0),
+            move |card, scale| {
+                let extra_w = card_w * ((scale - 1.0) * 0.5);
+                let extra_h = base_h * ((scale - 1.0) * 0.5);
+                card.w(card_w * scale)
+                    .h(base_h * scale)
+                    .ml(-extra_w)
+                    .mr(-extra_w)
+                    .mt(-extra_h)
+                    .mb(-extra_h)
+            },
+        );
+    // Paint the hovered card after its siblings so the scaled artwork stays on top.
+    if hovered {
+        deferred(card).priority(1).into_any_element()
+    } else {
+        card.into_any_element()
+    }
 }

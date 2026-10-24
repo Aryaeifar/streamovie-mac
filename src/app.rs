@@ -4,18 +4,18 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use gpui_kit::component::{
-    ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt as _, TitleBar, WindowExt as _,
-    button::Button,
+    ActiveTheme as _, Icon, IconName, Placement, Sizable as _, StyledExt as _, TitleBar,
+    WindowExt as _,
+    button::{Button, ButtonVariants as _},
     h_flex,
     input::{Input, InputEvent, InputState},
     scroll::ScrollableElement as _,
-    sidebar::SidebarToggleButton,
     v_flex,
 };
 use gpui_kit::{
     AnyElement, App, AppContext as _, Context, Entity, Image, InteractiveElement as _, IntoElement,
-    ParentElement as _, Render, ScrollHandle, SharedString, StatefulInteractiveElement as _,
-    Styled as _, Subscription, Window, div, point, prelude::FluentBuilder as _, px, white,
+    ParentElement as _, Render, ScrollHandle, SharedString, Styled as _, Subscription, Window, div,
+    point, px,
 };
 
 use crate::{
@@ -59,7 +59,6 @@ pub struct StreamovieApp {
     library: LibraryStoreData,
 
     section: NavSection,
-    sidebar_collapsed: bool,
 
     home: HomeFeedState,
     home_row_scroll_handles: [ScrollHandle; 4],
@@ -76,6 +75,7 @@ pub struct StreamovieApp {
     downloads: Vec<DownloadHandle>,
     download_polling: bool,
     player_polling: bool,
+    hovered_card: Option<SharedString>,
 
     _subscriptions: Vec<Subscription>,
 }
@@ -147,7 +147,6 @@ impl StreamovieApp {
             settings,
             library,
             section: NavSection::Home,
-            sidebar_collapsed: false,
             home: HomeFeedState {
                 loading: true,
                 ..Default::default()
@@ -169,6 +168,7 @@ impl StreamovieApp {
             downloads: Vec::new(),
             download_polling: false,
             player_polling: false,
+            hovered_card: None,
             _subscriptions: vec![search_sub],
         };
 
@@ -206,6 +206,24 @@ impl StreamovieApp {
 
     pub fn home_row_scroll_handle(&self, index: usize) -> &ScrollHandle {
         &self.home_row_scroll_handles[index.min(self.home_row_scroll_handles.len() - 1)]
+    }
+
+    pub fn card_is_hovered(&self, id: &SharedString) -> bool {
+        self.hovered_card.as_ref() == Some(id)
+    }
+
+    pub fn set_card_hovered(&mut self, id: &SharedString, hovered: bool, cx: &mut Context<Self>) {
+        if hovered {
+            if self.hovered_card.as_ref() == Some(id) {
+                return;
+            }
+            self.hovered_card = Some(id.clone());
+        } else if self.hovered_card.as_ref() == Some(id) {
+            self.hovered_card = None;
+        } else {
+            return;
+        }
+        cx.notify();
     }
 
     pub fn scroll_home_row(&mut self, index: usize, direction: isize, cx: &mut Context<Self>) {
@@ -1065,115 +1083,54 @@ impl StreamovieApp {
         let locale = self.locale();
         let dict = locale.dict();
         let rtl = locale.is_rtl();
-        let collapsed = self.sidebar_collapsed;
         let is_active =
             self.playback.is_none() && self.active_details.is_none() && self.section == item;
-        let primary = cx.theme().primary;
-        let muted = cx.theme().sidebar_foreground.opacity(0.62);
-        let row_id = SharedString::from(format!("nav-{}", item.label(dict)));
+        let label = item.label(dict);
+        let row_id = SharedString::from(format!("nav-{label}"));
+        let icon_color = if is_active {
+            cx.theme().foreground
+        } else {
+            cx.theme().muted_foreground.opacity(0.72)
+        };
 
-        div()
-            .id(row_id)
-            .w_full()
-            .h(px(40.))
-            .px_2p5()
-            .rounded(px(10.))
-            .cursor_pointer()
-            .when(is_active, |el| el.bg(primary.opacity(0.16)))
-            .hover(|style| style.bg(cx.theme().sidebar_foreground.opacity(0.06)))
+        Button::new(row_id)
+            .text()
+            .with_size(px(34.))
+            .w(px(44.))
+            .h(px(44.))
+            .rounded_full()
+            .icon(item.icon())
+            .text_color(icon_color)
+            .tooltip(label)
+            .tooltip_placement(if rtl {
+                Placement::Left
+            } else {
+                Placement::Right
+            })
             .on_click(cx.listener(move |this, _, _, cx| {
                 this.select_section(item, cx);
             }))
-            .child(
-                directional_row(h_flex(), rtl)
-                    .h_full()
-                    .items_center()
-                    .gap_3()
-                    .when(collapsed, |row| row.justify_center())
-                    .child(Icon::new(item.icon()).small().text_color(if is_active {
-                        primary
-                    } else {
-                        muted
-                    }))
-                    .when(!collapsed, |row| {
-                        row.child(
-                            div()
-                                .text_sm()
-                                .when(is_active, |text| {
-                                    text.font_semibold().text_color(cx.theme().foreground)
-                                })
-                                .when(!is_active, |text| text.text_color(muted))
-                                .child(item.label(dict)),
-                        )
-                    }),
-            )
             .into_any_element()
     }
 
     fn render_sidebar(&self, cx: &mut Context<Self>) -> AnyElement {
-        let locale = self.locale();
-        let dict = locale.dict();
-        let rtl = locale.is_rtl();
-        let collapsed = self.sidebar_collapsed;
-        let width = if collapsed { px(72.) } else { px(220.) };
-        let primary = [
+        let items = [
+            NavSection::Search,
             NavSection::Home,
             NavSection::Movies,
             NavSection::Series,
-            NavSection::Search,
+            NavSection::Bookmarks,
+            NavSection::Settings,
         ];
-        let library = [NavSection::Bookmarks, NavSection::Settings];
 
         v_flex()
-            .w(width)
+            .w(px(72.))
             .h_full()
             .flex_shrink_0()
-            .bg(cx.theme().sidebar)
-            .px_3()
-            .py_4()
-            .gap_6()
-            .child(
-                directional_row(h_flex(), rtl)
-                    .items_center()
-                    .gap_2p5()
-                    .px_1()
-                    .when(collapsed, |row| row.justify_center())
-                    .child(
-                        div()
-                            .size_8()
-                            .rounded(px(8.))
-                            .bg(cx.theme().primary)
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .text_color(white())
-                            .child(Icon::new(IconName::Play).small()),
-                    )
-                    .when(!collapsed, |row| {
-                        row.child(
-                            div()
-                                .text_base()
-                                .font_semibold()
-                                .text_color(cx.theme().foreground)
-                                .child(dict.brand.name),
-                        )
-                    }),
-            )
-            .child(
-                v_flex().gap_1().children(
-                    primary
-                        .into_iter()
-                        .map(|item| self.render_nav_row(item, cx)),
-                ),
-            )
-            .child(div().flex_1())
-            .child(
-                v_flex().gap_1().children(
-                    library
-                        .into_iter()
-                        .map(|item| self.render_nav_row(item, cx)),
-                ),
-            )
+            .items_center()
+            .justify_center()
+            .gap_3()
+            .children(items.into_iter().map(|item| self.render_nav_row(item, cx)))
             .into_any_element()
     }
 
@@ -1181,7 +1138,6 @@ impl StreamovieApp {
         let locale = self.locale();
         let dict = locale.dict();
         let rtl = locale.is_rtl();
-        let side = locale.sidebar_side();
         let mode_icon = match self.settings.theme_mode {
             ThemeModePreference::Dark => IconName::Moon,
             ThemeModePreference::Light => IconName::Sun,
@@ -1195,20 +1151,6 @@ impl StreamovieApp {
             .items_center()
             .justify_between()
             .gap_4()
-            .child(
-                SidebarToggleButton::new()
-                    .side(side)
-                    .collapsed(self.sidebar_collapsed)
-                    .accessibility_label(if self.sidebar_collapsed {
-                        dict.nav.expand_sidebar
-                    } else {
-                        dict.nav.collapse_sidebar
-                    })
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        this.sidebar_collapsed = !this.sidebar_collapsed;
-                        cx.notify();
-                    })),
-            )
             .child(
                 div().w(px(460.)).max_w_full().child(
                     Input::new(&self.search_input).cleanable(true).prefix(

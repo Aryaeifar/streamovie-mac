@@ -11,7 +11,7 @@ use gpui_kit::component::{
 };
 use gpui_kit::{
     AnyElement, Context, IntoElement, ParentElement as _, Styled as _, div,
-    prelude::FluentBuilder as _,
+    prelude::FluentBuilder as _, px,
 };
 
 use crate::{
@@ -125,7 +125,8 @@ pub fn render_bookmarks_view(app: &StreamovieApp, cx: &mut Context<StreamovieApp
             h_flex()
                 .flex_wrap()
                 .gap_x_4()
-                .gap_y_6()
+                .gap_y(px(72.))
+                .py(px(36.))
                 .when(rtl, |row| row.flex_row_reverse())
                 .children(cards)
                 .into_any_element()
