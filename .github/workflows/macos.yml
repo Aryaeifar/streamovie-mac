@@ -24,11 +24,13 @@ jobs:
         run: |
           set -euo pipefail
           APP="Streamovie.app"
-          mkdir -p "$APP/Contents/MacOS"
+          mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
           cp target/release/streamovie-mac "$APP/Contents/MacOS/streamovie-mac"
           chmod +x "$APP/Contents/MacOS/streamovie-mac"
-          cat > "$APP/Contents/Info.plist" <<'EOF'
-          <?xml version="1.0" encoding="UTF-8"?>
+          cp assets/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
+          python3 - <<'PY'
+          from pathlib import Path
+          Path("Streamovie.app/Contents/Info.plist").write_text("""<?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
           <dict>
@@ -44,15 +46,25 @@ jobs:
             <string>0.1.0</string>
             <key>CFBundleExecutable</key>
             <string>streamovie-mac</string>
+            <key>CFBundleIconFile</key>
+            <string>AppIcon</string>
             <key>CFBundlePackageType</key>
             <string>APPL</string>
             <key>LSMinimumSystemVersion</key>
             <string>13.0</string>
+            <key>LSApplicationCategoryType</key>
+            <string>public.app-category.entertainment</string>
             <key>NSHighResolutionCapable</key>
             <true/>
           </dict>
           </plist>
-          EOF
+          """)
+          PY
+          # GitHub downloads get a quarantine flag. An ad-hoc signature keeps
+          # the bundle valid so macOS does not report it as damaged.
+          xattr -cr "$APP"
+          codesign --force --sign - --identifier com.streamovie.mac "$APP"
+          codesign --verify --strict --verbose=2 "$APP"
           STAGE="$(mktemp -d)"
           cp -R "$APP" "$STAGE/"
           ln -s /Applications "$STAGE/Applications"
