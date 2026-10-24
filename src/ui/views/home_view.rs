@@ -58,6 +58,8 @@ pub fn render_home_view(app: &StreamovieApp, cx: &mut Context<StreamovieApp>) ->
             NavSection::Series,
             BrowseSort::Created,
             PosterCardStyle::Widescreen,
+            Some(18),
+            true,
             rtl,
             cx,
         ))
@@ -74,6 +76,8 @@ pub fn render_home_view(app: &StreamovieApp, cx: &mut Context<StreamovieApp>) ->
             NavSection::Movies,
             BrowseSort::Created,
             PosterCardStyle::Poster,
+            Some(18),
+            true,
             rtl,
             cx,
         ))
@@ -90,6 +94,8 @@ pub fn render_home_view(app: &StreamovieApp, cx: &mut Context<StreamovieApp>) ->
             NavSection::Movies,
             BrowseSort::Imdb,
             PosterCardStyle::Poster,
+            None,
+            false,
             rtl,
             cx,
         ))
@@ -106,6 +112,8 @@ pub fn render_home_view(app: &StreamovieApp, cx: &mut Context<StreamovieApp>) ->
             NavSection::Series,
             BrowseSort::Imdb,
             PosterCardStyle::Poster,
+            None,
+            false,
             rtl,
             cx,
         ))
@@ -126,6 +134,8 @@ fn rail(
     target_nav: NavSection,
     target_sort: BrowseSort,
     card_style: PosterCardStyle,
+    item_limit: Option<usize>,
+    show_more: bool,
     rtl: bool,
     cx: &mut Context<StreamovieApp>,
 ) -> AnyElement {
@@ -134,9 +144,12 @@ fn rail(
     let scroll_handle = app.home_row_scroll_handle(row_index).clone();
     let (card_w, _) = card_style.frame();
     let card_gap = px(20.);
-    let cards: Vec<_> = items
+    let visible = match item_limit {
+        Some(limit) => &items[..items.len().min(limit)],
+        None => items,
+    };
+    let cards: Vec<_> = visible
         .iter()
-        .take(18)
         .map(|media| {
             render_poster_card_with_style(
                 app,
@@ -205,15 +218,21 @@ fn rail(
                                     this.scroll_home_row(row_index, 1, cx);
                                 })),
                         )
-                        .child(
-                            Button::new(SharedString::from(format!("rail-more-{section_key}")))
-                                .small()
-                                .ghost()
-                                .label(dict.actions.see_more)
-                                .on_click(cx.listener(move |this, _, _, cx| {
-                                    this.navigate_to_catalog_with_sort(target_nav, target_sort, cx);
-                                })),
-                        ),
+                        .when(show_more, |row| {
+                            row.child(
+                                Button::new(SharedString::from(format!("rail-more-{section_key}")))
+                                    .small()
+                                    .ghost()
+                                    .label(dict.actions.see_more)
+                                    .on_click(cx.listener(move |this, _, _, cx| {
+                                        this.navigate_to_catalog_with_sort(
+                                            target_nav,
+                                            target_sort,
+                                            cx,
+                                        );
+                                    })),
+                            )
+                        }),
                 ),
         )
         .child(if cards.is_empty() && loading {

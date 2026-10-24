@@ -1,14 +1,14 @@
 //! Movie and series detail pages, laid out like the Apple TV title screen.
 
 use gpui_kit::component::{
-    ActiveTheme as _, IconName, StyledExt as _, WindowExt as _,
+    ActiveTheme as _, IconName, Sizable as _, StyledExt as _, WindowExt as _,
     button::{Button, ButtonVariants as _},
     h_flex, v_flex,
 };
 use gpui_kit::{
-    AnyElement, Context, InteractiveElement as _, IntoElement, ParentElement as _, SharedString,
-    StatefulInteractiveElement as _, Styled as _, div, linear_color_stop, linear_gradient,
-    prelude::FluentBuilder as _, px, relative,
+    AnyElement, Context, InteractiveElement as _, IntoElement, MouseButton, MouseDownEvent,
+    MouseMoveEvent, MouseUpEvent, ParentElement as _, SharedString, StatefulInteractiveElement as _,
+    Styled as _, div, linear_color_stop, linear_gradient, prelude::FluentBuilder as _, px, relative,
 };
 
 use crate::{
@@ -614,29 +614,77 @@ fn render_episodes(
         })
         .collect();
 
+    let season_gap = px(12.);
+    let season_w = px(180.);
+    let season_count = details.seasons.len() as f32;
+    let season_row_w = if season_count == 0. {
+        px(0.)
+    } else {
+        season_w * season_count + season_gap * (season_count - 1.)
+    };
+    let episode_gap = px(18.);
+    let episode_w = px(292.);
+    let episode_count = cards.len() as f32;
+    let episode_row_w = if episode_count == 0. {
+        px(0.)
+    } else {
+        episode_w * episode_count + episode_gap * (episode_count - 1.)
+    };
+    let season_scroll = app.season_scroll_handle().clone();
+    let episode_scroll = app.episode_scroll_handle().clone();
+
     v_flex()
         .w_full()
         .min_w_0()
         .gap(px(16.))
+        .child(carousel_header(
+            "season-rail",
+            dict.details.choose_season,
+            rtl,
+            true,
+            cx,
+        ))
         .child(
             div()
                 .id("details-season-rail")
                 .w_full()
                 .min_w_0()
+                .h(px(92.))
                 .overflow_x_scroll()
                 .restrict_scroll_to_axis()
+                .track_scroll(&season_scroll)
+                .on_mouse_down(
+                    MouseButton::Left,
+                    cx.listener(|this, event: &MouseDownEvent, _, _| {
+                        this.begin_details_drag(true, event.position.x);
+                    }),
+                )
+                .on_mouse_move(cx.listener(|this, event: &MouseMoveEvent, _, cx| {
+                    if event.dragging() {
+                        this.pan_details_rail(true, event.position.x, cx);
+                    }
+                }))
+                .on_mouse_up(
+                    MouseButton::Left,
+                    cx.listener(|this, _: &MouseUpEvent, _, _| {
+                        this.end_details_drag();
+                    }),
+                )
                 .child(
-                    directional_row(h_flex(), rtl)
-                        .flex_shrink_0()
-                        .gap(px(8.))
-                        .py(px(2.))
+                    h_flex()
+                        .id("details-season-row")
+                        .flex_none()
+                        .h(px(84.))
+                        .w(season_row_w)
+                        .gap(season_gap)
+                        .when(rtl, |row| row.flex_row_reverse())
                         .children(details.seasons.iter().enumerate().map(|(index, season)| {
-                            season_pill(
-                                app,
+                            season_card(
                                 series_id,
                                 index,
                                 selected,
                                 &season.display_title(index),
+                                rtl,
                                 cx,
                             )
                         })),
@@ -655,55 +703,169 @@ fn render_episodes(
         .child(if cards.is_empty() {
             empty_state(IconName::Inbox, dict.details.no_episodes, "", None, cx)
         } else {
-            div()
-                .id("details-episode-rail")
+            v_flex()
                 .w_full()
                 .min_w_0()
-                .overflow_x_scroll()
-                .restrict_scroll_to_axis()
+                .gap(px(10.))
+                .child(carousel_header(
+                    "episode-rail",
+                    dict.details.episode,
+                    rtl,
+                    false,
+                    cx,
+                ))
                 .child(
-                    h_flex()
-                        .flex_shrink_0()
-                        .gap(px(18.))
-                        .py(px(8.))
-                        .when(rtl, |row| row.flex_row_reverse())
-                        .children(cards),
+                    div()
+                        .id("details-episode-rail")
+                        .w_full()
+                        .min_w_0()
+                        .overflow_x_scroll()
+                        .restrict_scroll_to_axis()
+                        .track_scroll(&episode_scroll)
+                        .on_mouse_down(
+                            MouseButton::Left,
+                            cx.listener(|this, event: &MouseDownEvent, _, _| {
+                                this.begin_details_drag(false, event.position.x);
+                            }),
+                        )
+                        .on_mouse_move(cx.listener(|this, event: &MouseMoveEvent, _, cx| {
+                            if event.dragging() {
+                                this.pan_details_rail(false, event.position.x, cx);
+                            }
+                        }))
+                        .on_mouse_up(
+                            MouseButton::Left,
+                            cx.listener(|this, _: &MouseUpEvent, _, _| {
+                                this.end_details_drag();
+                            }),
+                        )
+                        .child(
+                            h_flex()
+                                .id("details-episode-row")
+                                .flex_none()
+                                .w(episode_row_w)
+                                .gap(episode_gap)
+                                .py(px(8.))
+                                .when(rtl, |row| row.flex_row_reverse())
+                                .children(cards),
+                        ),
                 )
                 .into_any_element()
         })
         .into_any_element()
 }
 
-fn season_pill(
-    _app: &StreamovieApp,
+fn carousel_header(
+    id: &str,
+    label: &str,
+    rtl: bool,
+    season: bool,
+    cx: &mut Context<StreamovieApp>,
+) -> AnyElement {
+    let paint = ApplePaint::from_cx(cx);
+    directional_row(h_flex(), rtl)
+        .w_full()
+        .justify_between()
+        .items_center()
+        .child(apple_section_title(label, &paint))
+        .child(
+            directional_row(h_flex(), rtl).gap_1().child(
+                directional_row(h_flex(), rtl)
+                    .gap_1()
+                    .child(
+                        Button::new(SharedString::from(format!("{id}-prev")))
+                            .small()
+                            .secondary()
+                            .rounded(px(12.))
+                            .icon(if rtl {
+                                IconName::ChevronRight
+                            } else {
+                                IconName::ChevronLeft
+                            })
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                this.scroll_details_rail(season, -1, cx);
+                            })),
+                    )
+                    .child(
+                        Button::new(SharedString::from(format!("{id}-next")))
+                            .small()
+                            .secondary()
+                            .rounded(px(12.))
+                            .icon(if rtl {
+                                IconName::ChevronLeft
+                            } else {
+                                IconName::ChevronRight
+                            })
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                this.scroll_details_rail(season, 1, cx);
+                            })),
+                    ),
+            ),
+        )
+        .into_any_element()
+}
+
+fn season_card(
     series_id: u64,
     index: usize,
     selected: usize,
     label: &str,
+    rtl: bool,
     cx: &mut Context<StreamovieApp>,
 ) -> AnyElement {
     let paint = ApplePaint::from_cx(cx);
     let active = index == selected;
-    div()
+    let text = if active { paint.on_primary } else { paint.ink };
+    let meta = if active {
+        paint.on_primary
+    } else {
+        paint.secondary_text
+    };
+    v_flex()
         .id(SharedString::from(format!("season-{series_id}-{index}")))
-        .h(px(32.))
-        .px(px(14.))
-        .rounded(px(12.))
+        .w(px(180.))
+        .h(px(84.))
         .flex_shrink_0()
-        .items_center()
+        .px(px(14.))
         .justify_center()
+        .gap(px(4.))
+        .rounded(px(14.))
         .cursor_pointer()
-        .text_size(px(13.))
-        .when(active, |el| {
-            el.font_semibold()
-                .bg(paint.primary_fill)
-                .text_color(paint.on_primary)
+        .border_1()
+        .when(active, |card| {
+            card.bg(paint.primary_fill)
+                .border_color(paint.primary_fill)
+                .shadow(paint.poster_shadow(true))
         })
-        .when(!active, |el| {
-            el.bg(paint.chip).text_color(paint.secondary_text)
+        .when(!active, |card| {
+            card.bg(paint.surface)
+                .border_color(paint.hairline)
+                .shadow(paint.poster_shadow(false))
         })
-        .child(label.to_string())
+        .when(rtl, |card| card.items_end())
+        .child(
+            div()
+                .text_size(px(11.))
+                .font_semibold()
+                .text_color(meta)
+                .child(format!("{:02}", index + 1)),
+        )
+        .child(
+            div()
+                .w_full()
+                .text_size(px(14.))
+                .font_semibold()
+                .text_color(text)
+                .overflow_hidden()
+                .text_ellipsis()
+                .whitespace_nowrap()
+                .when(rtl, |el| el.text_right())
+                .child(label.to_string()),
+        )
         .on_click(cx.listener(move |this, _, _, cx| {
+            if this.take_details_drag_moved() {
+                return;
+            }
             this.select_season(index, cx);
         }))
         .into_any_element()
@@ -765,6 +927,9 @@ fn episode_card(
         .shadow(paint.poster_shadow(false))
         .cursor_pointer()
         .on_click(cx.listener(move |this, _, _, cx| {
+            if this.take_details_drag_moved() {
+                return;
+            }
             this.watch_sources(watch_heading.clone(), watch_sources.clone(), cx);
         }))
         .child(

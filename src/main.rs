@@ -7,6 +7,8 @@ mod download;
 mod i18n;
 mod models;
 mod playback;
+mod playback_dns;
+mod playback_server;
 mod state;
 mod storage;
 mod ui;

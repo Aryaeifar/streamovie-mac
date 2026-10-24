@@ -7,6 +7,8 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::config::DEFAULT_API_HOSTS;
+
 /// Media category (`movie` or `series`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -176,12 +178,19 @@ impl SourceLink {
             .any(|ext| path.ends_with(ext))
     }
 
-    /// Online playback candidate for the in-app player (progressive file or HLS).
+    /// Online playback candidate for the in-app player (progressive file, HLS, or embed page).
     pub fn is_streamable(&self) -> bool {
-        if self.is_trailer {
+        if self.is_trailer || self.url.trim().is_empty() {
             return false;
         }
-        self.is_playable_video() || self.is_hls() || self.is_direct_download()
+        let lower = url_path_lower(&self.url);
+        if [".jpg", ".jpeg", ".png", ".webp", ".gif", ".svg"]
+            .iter()
+            .any(|ext| lower.ends_with(ext))
+        {
+            return false;
+        }
+        true
     }
 
     pub fn file_extension(&self) -> &'static str {
@@ -231,11 +240,36 @@ fn quality_rank(quality: &str) -> i32 {
 }
 
 /// Highest-quality source the in-app player can attempt.
+/// MP4, MOV, and HLS outrank Matroska, because those play without a remux.
+/// A direct file still outranks a bare web page.
 pub fn best_stream_source(sources: &[SourceLink]) -> Option<&SourceLink> {
     sources
         .iter()
         .filter(|source| source.is_streamable())
-        .max_by_key(|source| quality_rank(&source.quality))
+        .max_by_key(|source| {
+            let path = url_path_lower(&source.url);
+            let native = [".mp4", ".m4v", ".mov", ".m3u8"]
+                .iter()
+                .any(|ext| path.ends_with(ext) || path.contains(&format!("{ext}?")));
+            let direct =
+                source.is_playable_video() || source.is_hls() || source.is_direct_download();
+            (native, direct, quality_rank(&source.quality))
+        })
+}
+
+/// Turns a catalog-relative media path into an absolute `https` URL.
+pub fn absolute_media_url(url: &str) -> String {
+    let trimmed = url.trim();
+    if trimmed.starts_with("//") {
+        return format!("https:{trimmed}");
+    }
+    if trimmed.starts_with('/') {
+        return format!("{}{trimmed}", DEFAULT_API_HOSTS[0]);
+    }
+    if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+        return trimmed.to_string();
+    }
+    format!("https://{trimmed}")
 }
 
 /// Highest-quality direct file suitable for a local download.
@@ -413,7 +447,17 @@ impl ApiMedia {
 
     /// Extracted stream/download sources.
     pub fn source_links(&self) -> Vec<SourceLink> {
-        extract_sources(self.sources.as_ref())
+        let direct = extract_sources(self.sources.as_ref());
+        if !direct.is_empty() {
+            return direct;
+        }
+        for key in ["downloads", "links", "files", "streams", "media"] {
+            let found = extract_sources(self.extra.get(key));
+            if !found.is_empty() {
+                return found;
+            }
+        }
+        direct
     }
 
     /// Parsed description with overview and labeled metadata blocks.
@@ -510,7 +554,18 @@ impl ApiSeason {
                     .filter(|s| !s.is_empty())
                     .unwrap_or_else(|| format!("Episode {}", index + 1));
                 let id = item.get("id").and_then(|v| v.as_u64());
-                let sources = extract_sources(item.get("sources"));
+                let mut sources = extract_sources(item.get("sources"));
+                if sources.is_empty() {
+                    for key in ["downloads", "links", "files", "streams"] {
+                        sources = extract_sources(item.get(key));
+                        if !sources.is_empty() {
+                            break;
+                        }
+                    }
+                }
+                if sources.is_empty() {
+                    sources = source_from_value(item, index).into_iter().collect();
+                }
                 Episode {
                     key: format!("{}-{index}", id.unwrap_or(index as u64)),
                     id,
@@ -559,48 +614,78 @@ fn extract_titles(value: Option<&Value>) -> Vec<String> {
 }
 
 pub fn extract_sources(value: Option<&Value>) -> Vec<SourceLink> {
-    let Some(Value::Array(items)) = value else {
+    let Some(value) = value else {
         return Vec::new();
     };
-    items
-        .iter()
-        .enumerate()
-        .filter_map(|(index, item)| {
-            let obj = item.as_object()?;
-            let url = obj
-                .get("url")
-                .or_else(|| obj.get("link"))
-                .or_else(|| obj.get("src"))
-                .and_then(value_to_string)?;
-            let quality = obj
-                .get("quality")
-                .or_else(|| obj.get("resolution"))
-                .or_else(|| obj.get("label"))
-                .and_then(value_to_string)
-                .unwrap_or_else(|| "Source".to_string());
-            let format_type = obj
-                .get("type")
-                .or_else(|| obj.get("format"))
-                .and_then(value_to_string);
-            let id = obj
-                .get("id")
-                .and_then(|v| v.as_u64())
-                .map(|v| v as usize)
-                .unwrap_or(index);
-            let q_lower = quality.to_lowercase();
-            let is_trailer = q_lower.contains("تیزر")
-                || q_lower.contains("trailer")
-                || q_lower.contains("teaser");
+    match value {
+        Value::String(text) => serde_json::from_str::<Value>(text)
+            .ok()
+            .filter(|parsed| !parsed.is_string())
+            .map(|parsed| extract_sources(Some(&parsed)))
+            .unwrap_or_default(),
+        Value::Array(items) => items
+            .iter()
+            .enumerate()
+            .filter_map(|(index, item)| source_from_value(item, index))
+            .collect(),
+        Value::Object(map) => {
+            if map.contains_key("url") || map.contains_key("link") || map.contains_key("src") {
+                return source_from_value(value, 0).into_iter().collect();
+            }
+            map.iter()
+                .enumerate()
+                .filter_map(|(index, (key, item))| match item {
+                    Value::String(url) if !url.trim().is_empty() => Some(SourceLink {
+                        id: index,
+                        quality: format_quality(key),
+                        format_type: None,
+                        url: url.trim().to_string(),
+                        is_trailer: false,
+                    }),
+                    _ => source_from_value(item, index),
+                })
+                .collect()
+        }
+        _ => Vec::new(),
+    }
+}
 
-            Some(SourceLink {
-                id,
-                quality: format_quality(&quality),
-                format_type,
-                url,
-                is_trailer,
-            })
-        })
-        .collect()
+fn source_from_value(item: &Value, index: usize) -> Option<SourceLink> {
+    let obj = item.as_object()?;
+    let url = obj
+        .get("url")
+        .or_else(|| obj.get("link"))
+        .or_else(|| obj.get("src"))
+        .or_else(|| obj.get("file"))
+        .or_else(|| obj.get("path"))
+        .or_else(|| obj.get("stream"))
+        .and_then(value_to_string)?;
+    let quality = obj
+        .get("quality")
+        .or_else(|| obj.get("resolution"))
+        .or_else(|| obj.get("label"))
+        .and_then(value_to_string)
+        .unwrap_or_else(|| "Source".to_string());
+    let format_type = obj
+        .get("type")
+        .or_else(|| obj.get("format"))
+        .and_then(value_to_string);
+    let id = obj
+        .get("id")
+        .and_then(|v| v.as_u64())
+        .map(|v| v as usize)
+        .unwrap_or(index);
+    let q_lower = quality.to_lowercase();
+    let is_trailer =
+        q_lower.contains("تیزر") || q_lower.contains("trailer") || q_lower.contains("teaser");
+
+    Some(SourceLink {
+        id,
+        quality: format_quality(&quality),
+        format_type,
+        url,
+        is_trailer,
+    })
 }
 
 pub fn format_quality(quality: &str) -> String {

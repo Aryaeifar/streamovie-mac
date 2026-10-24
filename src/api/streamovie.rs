@@ -10,9 +10,14 @@ use serde::de::DeserializeOwned;
 use crate::{
     config::AppConfig,
     models::{
-        ApiCountry, ApiGenre, ApiMedia, ApiSeason, BrowseSort, SearchResponse, exclude_hidden_media,
+        ApiCountry, ApiGenre, ApiMedia, ApiSeason, BrowseSort, MediaCategory, SearchResponse,
+        exclude_hidden_media, imdb_top250,
     },
 };
+
+/// Catalog genre “250 برتر تاریخ”. It holds the site’s Top 250 bucket, not chart order.
+const TOP250_GENRE_ID: u64 = 32;
+const TOP250_PAGE_SIZE: usize = 30;
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
 
@@ -91,6 +96,30 @@ impl StreamovieClient {
             .request_with_fallback(&path)
             .context("Failed to fetch movies")?;
         Ok(exclude_hidden_media(items))
+    }
+
+    /// Every page of the Top 250 genre, kept only when it is on the official chart
+    /// and ordered by that rank.
+    pub fn fetch_imdb_chart(&self, category: MediaCategory) -> Result<Vec<ApiMedia>> {
+        let mut collected = Vec::new();
+        for page in 0..8 {
+            let batch = match category {
+                MediaCategory::Movie => self.fetch_movies(page, TOP250_GENRE_ID, BrowseSort::Imdb),
+                MediaCategory::Series => self.fetch_series(page, TOP250_GENRE_ID, BrowseSort::Imdb),
+            };
+            match batch {
+                Ok(items) => {
+                    let done = items.len() < TOP250_PAGE_SIZE;
+                    collected.extend(items);
+                    if done {
+                        break;
+                    }
+                }
+                Err(err) if collected.is_empty() => return Err(err),
+                Err(_) => break,
+            }
+        }
+        Ok(imdb_top250::in_chart_order(collected, category))
     }
 
     /// `GET /api/serie/by/filtres/{genreId}/{sort}/{page}/{key}`

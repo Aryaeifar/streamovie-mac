@@ -6,7 +6,7 @@ use gpui_kit::component::{
     button::{Button, ButtonVariants as _},
     h_flex, v_flex,
 };
-use gpui_kit::{AnyElement, Context, IntoElement, ParentElement as _, Styled as _, div, px};
+use gpui_kit::{AnyElement, Context, IntoElement, ParentElement as _, Styled as _, div, hsla, px};
 
 pub fn render_player_view(
     app: &StreamovieApp,
@@ -82,7 +82,7 @@ pub fn render_player_view(
                 .flex_1()
                 .min_h_0()
                 .w_full()
-                .bg(cx.theme().background)
+                .bg(hsla(0.0, 0.0, 0.0, 1.0))
                 .child(webview.clone())
                 .into_any_element(),
         })

@@ -1,8 +1,5 @@
-//! In-app player page rendered by WKWebView (via `gpui-wry` / `lb-wry`).
-//!
-//! macOS WebKit plays progressive MP4 (and related QuickTime types) and HLS (`.m3u8`).
-//! Other containers such as MKV or WebM are only attempted when the catalog URL is a
-//! direct file; WebKit reports a playback error if it cannot decode them.
+//! In-app player. The page itself is served on localhost and the catalog file is
+//! proxied through that same origin, so WKWebView can play MP4 and HLS.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -54,18 +51,13 @@ pub fn mount_player(
     cx: &mut impl gpui_kit::AppContext,
     url: &str,
     title: &str,
-    close_requested: Arc<AtomicBool>,
+    _close_requested: Arc<AtomicBool>,
 ) -> Result<Entity<WebView>, String> {
-    let html = player_document(title, url);
-    let flag = close_requested;
+    let page = crate::playback_server::player_page(url, title).map_err(|err| err.to_string())?;
     let handle = HasWindowHandle::window_handle(window).map_err(|err| err.to_string())?;
     let built = wry::WebViewBuilder::new()
-        .with_html(&html)
-        .with_ipc_handler(move |request: wry::http::Request<String>| {
-            if request.body().contains("close") {
-                flag.store(true, Ordering::Relaxed);
-            }
-        })
+        .with_autoplay(true)
+        .with_url(page)
         .build_as_child(&handle)
         .map_err(|err| err.to_string())?;
 
@@ -118,7 +110,8 @@ pub fn player_document(title: &str, media_url: &str) -> String {
   .message strong {{ display: block; margin-bottom: 4px; font-size: 14px; }}
   .message p {{ margin: 0; color: #c8c8c6; font-size: 13px; line-height: 1.45; }}
   .center-play {{
-    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    display: none;
+    position: absolute; inset: 0; align-items: center; justify-content: center;
     background: transparent; border: 0; cursor: pointer;
   }}
   .center-play[hidden] {{ display: none; }}
@@ -127,6 +120,7 @@ pub fn player_document(title: &str, media_url: &str) -> String {
     background: rgba(255,255,255,.94); color: #111;
   }}
   .bar {{
+    display: none;
     position: absolute; left: 0; right: 0; bottom: 0;
     padding: 28px 18px 14px;
     background: linear-gradient(to top, rgba(0,0,0,.82), rgba(0,0,0,0));
@@ -152,7 +146,7 @@ pub fn player_document(title: &str, media_url: &str) -> String {
 </head>
 <body>
   <div class="stage">
-    <video id="video" playsinline preload="auto"></video>
+    <video id="video" playsinline preload="auto" controls></video>
     <div class="veil" id="loading"><div class="spinner"></div></div>
     <div class="message" id="message"><strong id="message-title"></strong><p id="message-body"></p></div>
     <button class="center-play" id="center" hidden aria-label="Play"><span>▶</span></button>
@@ -224,7 +218,10 @@ video.addEventListener('play', sync);
 video.addEventListener('pause', sync);
 video.addEventListener('volumechange', sync);
 video.addEventListener('error', () => {{
-  showError('Streamovie could not play this address. The catalog link is missing, blocked, or not an MP4 or HLS stream WebKit can open.');
+  fetch('/status').then((res) => res.text()).then((text) => {{
+    const detail = (text || '').trim();
+    showError(detail || 'Streamovie could not decode this file.');
+  }}).catch(() => showError('Streamovie could not decode this file.'));
 }});
 
 function toggle() {{

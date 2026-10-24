@@ -21,9 +21,9 @@ use crate::{
     config::AppConfig,
     download::{self, DownloadHandle, DownloadSnapshot},
     i18n::{Locale, directional_row},
-    models::{
+        models::{
         ApiGenre, ApiMedia, BrowseSort, LibraryStoreData, MediaCategory, SavedMediaEntry,
-        SourceLink, best_stream_source,
+        SourceLink, absolute_media_url, best_stream_source,
     },
     playback::{self, PlaybackSession},
     state::{
@@ -47,6 +47,13 @@ use crate::{
 #[derive(Clone, Copy)]
 struct RailDrag {
     index: usize,
+    start_x: Pixels,
+    start_offset_x: Pixels,
+}
+
+#[derive(Clone, Copy)]
+struct DetailsDrag {
+    season: bool,
     start_x: Pixels,
     start_offset_x: Pixels,
 }
@@ -79,6 +86,8 @@ pub struct StreamovieApp {
 
     home: HomeFeedState,
     home_row_scroll_handles: [ScrollHandle; 4],
+    season_scroll: ScrollHandle,
+    episode_scroll: ScrollHandle,
     main_scroll: ScrollHandle,
     movies_catalog: CatalogGridState,
     series_catalog: CatalogGridState,
@@ -98,6 +107,8 @@ pub struct StreamovieApp {
     pressed_control: Option<SharedString>,
     rail_drag: Option<RailDrag>,
     rail_drag_moved: bool,
+    details_drag: Option<DetailsDrag>,
+    details_drag_moved: bool,
 
     _subscriptions: Vec<Subscription>,
 }
@@ -179,6 +190,8 @@ impl StreamovieApp {
                 ScrollHandle::new(),
                 ScrollHandle::new(),
             ],
+            season_scroll: ScrollHandle::new(),
+            episode_scroll: ScrollHandle::new(),
             main_scroll: ScrollHandle::new(),
             movies_catalog: CatalogGridState::new(MediaCategory::Movie),
             series_catalog: CatalogGridState::new(MediaCategory::Series),
@@ -196,6 +209,8 @@ impl StreamovieApp {
             pressed_control: None,
             rail_drag: None,
             rail_drag_moved: false,
+            details_drag: None,
+            details_drag_moved: false,
             _subscriptions: vec![search_sub],
         };
 
@@ -354,6 +369,77 @@ impl StreamovieApp {
 
     pub fn end_rail_drag(&mut self) {
         self.rail_drag = None;
+    }
+
+    pub fn season_scroll_handle(&self) -> &ScrollHandle {
+        &self.season_scroll
+    }
+
+    pub fn episode_scroll_handle(&self) -> &ScrollHandle {
+        &self.episode_scroll
+    }
+
+    pub fn scroll_details_rail(&mut self, season: bool, direction: isize, cx: &mut Context<Self>) {
+        let handle = if season {
+            &self.season_scroll
+        } else {
+            &self.episode_scroll
+        };
+        let current = handle.offset();
+        let step = px(if season { 360. } else { 620. } * (direction as f32));
+        let next_x = clamp_rail_offset(current.x - step, handle.max_offset().x);
+        handle.set_offset(point(next_x, current.y));
+        cx.notify();
+    }
+
+    pub fn begin_details_drag(&mut self, season: bool, x: Pixels) {
+        let handle = if season {
+            &self.season_scroll
+        } else {
+            &self.episode_scroll
+        };
+        self.details_drag_moved = false;
+        self.details_drag = Some(DetailsDrag {
+            season,
+            start_x: x,
+            start_offset_x: handle.offset().x,
+        });
+    }
+
+    pub fn pan_details_rail(&mut self, season: bool, x: Pixels, cx: &mut Context<Self>) {
+        let Some(drag) = self.details_drag else {
+            return;
+        };
+        if drag.season != season {
+            return;
+        }
+        let dx = x - drag.start_x;
+        let distance = if dx < px(0.) { -dx } else { dx };
+        if distance > px(8.) {
+            self.details_drag_moved = true;
+        }
+        let handle = if season {
+            &self.season_scroll
+        } else {
+            &self.episode_scroll
+        };
+        let next_x = clamp_rail_offset(drag.start_offset_x + dx, handle.max_offset().x);
+        let current = handle.offset();
+        if current.x == next_x {
+            return;
+        }
+        handle.set_offset(point(next_x, current.y));
+        cx.notify();
+    }
+
+    pub fn end_details_drag(&mut self) {
+        self.details_drag = None;
+    }
+
+    pub fn take_details_drag_moved(&mut self) -> bool {
+        let moved = self.details_drag_moved;
+        self.details_drag_moved = false;
+        moved
     }
 
     pub(crate) fn image_status(
@@ -582,8 +668,8 @@ impl StreamovieApp {
                     (
                         client.fetch_movies(0, 0, BrowseSort::Created),
                         client.fetch_series(0, 0, BrowseSort::Created),
-                        client.fetch_movies(0, 32, BrowseSort::Imdb),
-                        client.fetch_series(0, 32, BrowseSort::Imdb),
+                        client.fetch_imdb_chart(MediaCategory::Movie),
+                        client.fetch_imdb_chart(MediaCategory::Series),
                     )
                 })
                 .await;
@@ -968,7 +1054,7 @@ impl StreamovieApp {
         self.close_playback(cx);
         let message = self.locale().dict().player.unavailable_body.to_string();
         self.playback = Some(match best_stream_source(&sources) {
-            Some(source) => PlaybackSession::for_url(heading, source.url.clone()),
+            Some(source) => PlaybackSession::for_url(heading, absolute_media_url(&source.url)),
             None => PlaybackSession::unavailable(heading, message),
         });
         self.ensure_player_poll(cx);
@@ -976,6 +1062,7 @@ impl StreamovieApp {
     }
 
     pub fn close_playback(&mut self, cx: &mut Context<Self>) {
+        crate::playback_server::stop_active();
         if let Some(session) = self.playback.take() {
             if let Some(webview) = session.webview {
                 webview.update(cx, |webview, _| webview.hide());
@@ -988,9 +1075,12 @@ impl StreamovieApp {
             return;
         };
         let series_title = details.media.display_title();
+        let season_index = details
+            .selected_season_index
+            .min(details.seasons.len().saturating_sub(1));
         let episode = details
             .seasons
-            .first()
+            .get(season_index)
             .and_then(|season| season.episode_list().into_iter().next());
         match episode {
             Some(episode) => {
@@ -1174,6 +1264,7 @@ impl StreamovieApp {
             return;
         }
         details.selected_season_index = season_index;
+        self.episode_scroll.set_offset(point(px(0.), px(0.)));
         let media_id = details.media.id;
         let lookup_title = details.media.english_lookup_title();
         let year = details.media.release_year();
